@@ -1,0 +1,43 @@
+{
+  "id": "bella-canvas-3001/pose-01-front",
+  "label": "pose-01-front",
+  "brand": "",
+  "model": "",
+  "color": "",
+  "gender": "",
+  "pose": "",
+  "environment": "",
+  "source": "unknown",
+  "source_detail": "",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "2026-07-30",
+  "print_quad": [
+    [
+      395,
+      145
+    ],
+    [
+      785,
+      145
+    ],
+    [
+      785,
+      335
+    ],
+    [
+      395,
+      335
+    ]
+  ],
+  "design_scale": 0.9,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0
+}

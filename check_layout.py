@@ -18,12 +18,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 REQUIRED_FILES = [
+    "batch.py",
     "cli.py",
+    "server.py",
     "requirements.txt",
     "mockup_engine/__init__.py",
     "mockup_engine/compositor.py",
     "mockup_engine/library.py",
     "mockup_engine/pipeline.py",
+    "mockup_engine/recolor.py",
     "comfybridge/__init__.py",
     "comfybridge/client.py",
     "comfybridge/variants.json",
@@ -32,6 +35,7 @@ REQUIRED_FILES = [
     "tools/calibrate_quad.py",
     "tools/generate_bases.py",
     "tools/prepare_base.py",
+    "tools/verify_recolor.py",
     "tools/verify_preservation.py",
 ]
 

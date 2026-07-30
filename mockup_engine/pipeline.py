@@ -13,6 +13,7 @@ import numpy as np
 
 from .compositor import CompositeSettings, render
 from .library import BaseModel, LibraryError, load_model
+from .recolor import recolor_garment
 
 
 def load_design(path: Path) -> np.ndarray:
@@ -59,10 +60,14 @@ def generate_mockup(
     library_dir: Path,
     output_path: Path,
     overrides: dict | None = None,
+    color: str | None = None,
 ) -> Path:
     """Tek tasarim + tek base model -> tek mockup dosyasi.
 
     overrides: meta.json'daki ayarlari CLI'dan gecici olarak ezmek icin.
+    color: preset adi veya '#RRGGBB'. None ise renk degistirilmez ve
+           davranis eskisiyle BIREBIR ayni kalir -- mevcut testler ve
+           kalibre edilmis meta.json degerleri etkilenmez.
     """
     model: BaseModel = load_model(model_id, library_dir)
     design = load_design(design_path)
@@ -70,8 +75,15 @@ def generate_mockup(
     meta = _merge_overrides(model.meta, overrides)
     settings = CompositeSettings.from_meta(meta)
 
+    # Renk degistirme, tasarim hattina girmeden ONCE base uzerinde yapilir.
+    # compositor.py bundan habersiz; shading.png yeniden hesaplanmaz cunku
+    # baski uzerindeki GORELI isik degismiyor.
+    base_rgb = model.base.astype(np.float32) / 255.0
+    if color:
+        base_rgb, _ = recolor_garment(base_rgb, model.garment_mask, color)
+
     result = render(
-        base_rgb=model.base.astype(np.float32) / 255.0,
+        base_rgb=base_rgb,
         design_rgba=design,
         print_mask=model.print_mask,
         displace_gray=model.displace,

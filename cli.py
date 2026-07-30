@@ -30,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default="test-model", help="Base model id")
     parser.add_argument("--out", help="Cikti dosyasi (varsayilan outputs/mockup.png)")
     parser.add_argument("--list", action="store_true", help="Base modelleri listele")
+    parser.add_argument("--color", help="Tisort rengi: white|buttery|light_green|black|navy|#RRGGBB")
 
     # meta.json'daki degerleri gecici olarak ezmek icin -- kalibrasyon
     # yaparken dosyayi surekli duzenlemek yerine burasi kullanilir.
@@ -81,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             library_dir=LIBRARY_DIR,
             output_path=output_path,
             overrides=overrides or None,
+            color=args.color,
         )
     except (LibraryError, FileNotFoundError) as err:
         print(f"HATA: {err}", file=sys.stderr)
@@ -88,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"\nTasarim : {design_path.name}")
     print(f"Model   : {args.model}")
+    if args.color:
+        print(f"Renk    : {args.color}")
     print(f"Cikti   : {result}\n")
     return 0
 

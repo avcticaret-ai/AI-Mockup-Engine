@@ -359,3 +359,283 @@ base model kütüphanesinin durumu, ve bağımlılıklar.
 
 Herhangi bir şey çalıştırmadan önce bunu çalıştır ve **"Yapı doğru"**
 çıktısını gör.
+
+---
+
+## Renk değiştirme (Faz 1)
+
+`mockup_engine/recolor.py` — beş renk tek beyaz base'den türetiliyor.
+
+```python
+from mockup_engine import generate_mockup
+generate_mockup(design, model_id, library, out, color="navy")
+```
+
+`color=None` (varsayılan) → recolor atlanır, davranış eskisiyle **bit bit
+aynı**. Mevcut kalibre edilmiş `meta.json` değerleri ve regresyon
+testleri etkilenmez.
+
+### compositor.py'ye dokunulmadı
+
+Recolor base görseli üzerinde ön işlemdir, tasarım hattına girmez:
+
+```
+base.png ──recolor(garment_mask, renk)──> renkli base
+                                              │
+design.png ──warp──displace──shade──mask──composite──> mockup
+                    ↑ bu beş adım değişmedi
+```
+
+`shading.png` yeniden hesaplanmıyor: tişört siyaha dönse de baskının
+üzerine düşen **göreli** ışık aynı kalıyor.
+
+### Neden CIELAB, neden çarpma değil
+
+İlk tasarım linear uzayda difüz/spekuler ayrımı öngörüyordu. Uygulamadan
+önce ölçüldü ve yetersiz çıktı. `test-model` üzerindeki sonuçlar:
+
+| Renk | Yöntem | L* yayılımı | Base'e oran | Sonuç |
+|---|---|---|---|---|
+| black | multiply | 6.39 | 0.30 | **yetersiz** |
+| black | lab | 18.95 | 0.89 | geçti |
+| navy | multiply | 7.75 | 0.36 | **yetersiz** |
+| navy | lab | 19.78 | 0.93 | geçti |
+
+Sebep gamma'nın yönü: linear uzayda çarpma koyu hedefte kıvrım bilgisini
+sıfıra doğru sıkıştırıyor, sRGB'ye dönüşteki gamma genişlemesi telafi
+etmeye yetmiyor.
+
+Uygulanan yöntem CIELAB'da kontrast koruma:
+
+```
+L*_çıktı = L*_hedef + (L*_base − L*_ortalama) × kontrast
+```
+
+L* algısal olarak düzgün olduğu için aynı yayılım koyu ve açık renkte
+aynı miktarda kıvrım görünürlüğü demek. cv2'nin Lab dönüşümü
+sRGB → linear → XYZ → Lab zincirini kendisi yaptığı için istenen linear
+workflow bedava geliyor.
+
+`method="multiply"` karşılaştırma için duruyor. Üretimde kullanma.
+
+### preserve_spread
+
+Hedef L*, base ortalamasından uzaksa kırpma oluşur. Beyaz base üzerine
+beyaz uygularken hedef L*=97, base ortalaması 85 → giysinin **%33.8'i**
+tavanda doyup düzleşiyordu.
+
+`preserve_spread=True` (varsayılan) bu durumda hedef L*'ı kaydırıp
+yayılımı koruyor. Kıvrım görünürlüğü, hedef parlaklığı birebir
+tutmaktan daha değerli.
+
+| Renk | preserve_spread yok | var |
+|---|---|---|
+| white | yayılım 13.44, tavan kırpma %33.8 | yayılım 21.41, kırpma %2.0 |
+
+### Renk presetleri
+
+Gerçek kumaş değerleri, saf renkler değil. Saf `#000000` difüz terimi
+sıfırlar; gerçek siyah tişört ~`#1F1F1F`.
+
+| Preset | sRGB |
+|---|---|
+| white | `#F7F7F5` |
+| buttery | `#EFDFA8` |
+| light_green | `#9CAF88` |
+| black | `#1F1F1F` |
+| navy | `#232F3E` |
+
+`#RRGGBB` doğrudan da verilebilir.
+
+### Ölçüm
+
+```bash
+python tools/verify_recolor.py test-model
+python tools/verify_recolor.py <model> --write   # görselleri de yaz
+```
+
+Karar ölçütü: bir rengin L* yayılımı, base'in yayılımının **%60'ının**
+altına düşerse kıvrımlar düz okunur → o renk için ayrı koyu base gerekir.
+
+Araç çıkış kodu 2 döndürürse tek base ailesi yetersiz demektir.
+`compositor.py` veya `recolor.py` değiştiğinde çalıştır.
+
+---
+
+## HTTP API (server.py)
+
+n8n, Next.js veya başka bir otomasyondan tetiklemek için.
+
+```bash
+pip install -r requirements.txt
+uvicorn server:app --host 127.0.0.1 --port 8080 --reload
+```
+
+Etkileşimli dokümantasyon: http://127.0.0.1:8080/docs
+
+**`server.py` hiçbir görüntü işleme mantığı içermez.** Tek işi HTTP
+isteğini `mockup_engine.generate_mockup()` çağrısına çevirmek. Böylece
+API ve CLI birebir aynı çıktıyı üretir; compositor, recolor ve kütüphane
+mantığı tek yerde kalır.
+
+### Uç noktalar
+
+| Yöntem | Yol | İş |
+|---|---|---|
+| GET | `/health` | durum + kütüphanedeki modeller |
+| GET | `/colors` | renk presetleri |
+| POST | `/render` | tek mockup (multipart **veya** JSON) |
+| POST | `/batch-render` | model × renk matrisi |
+| GET | `/outputs/{job_id}/{dosya}` | toplu çıktıyı indir |
+| GET | `/outputs/{job_id}.zip` | hepsini zip olarak indir |
+
+### Örnekler
+
+```bash
+# sağlık
+curl http://127.0.0.1:8080/health
+
+# tek render, dosya yükleyerek
+curl -X POST http://127.0.0.1:8080/render \
+  -F "design_file=@tasarimlar/test-design.png" \
+  -F "model_id=test-model" \
+  -F "color=navy" \
+  -o mockup.png
+
+# kalibrasyon ezmeleriyle
+curl -X POST http://127.0.0.1:8080/render \
+  -F "design_file=@tasarim.png" \
+  -F "model_id=test-model" \
+  -F "scale=0.85" -F "displace=20" -F "shading=0.7" \
+  -o mockup.png
+
+# JSON + base64, yanıt da JSON
+curl -X POST http://127.0.0.1:8080/render \
+  -H "Content-Type: application/json" \
+  -d "{\"design_base64\":\"$(base64 -w0 tasarim.png)\",
+       \"model_id\":\"test-model\",\"color\":\"black\",
+       \"response_mode\":\"json\"}"
+
+# toplu: 1 model x 5 renk
+curl -X POST http://127.0.0.1:8080/batch-render \
+  -H "Content-Type: application/json" \
+  -d "{\"design_base64\":\"$(base64 -w0 tasarim.png)\",
+       \"model_ids\":[\"test-model\"],
+       \"colors\":[\"white\",\"buttery\",\"light_green\",\"black\",\"navy\"]}"
+```
+
+```python
+import requests
+
+# tek render
+r = requests.post("http://127.0.0.1:8080/render",
+                  files={"design_file": open("tasarim.png", "rb")},
+                  data={"model_id": "test-model", "color": "navy"})
+open("mockup.png", "wb").write(r.content)
+
+# toplu render + zip indirme
+import base64
+design = base64.b64encode(open("tasarim.png", "rb").read()).decode()
+job = requests.post("http://127.0.0.1:8080/batch-render", json={
+    "design_base64": design,
+    "model_ids": ["test-model"],
+    "colors": ["white", "black", "navy"],
+}).json()
+
+print(job["succeeded"], "/", job["requested"])
+z = requests.get("http://127.0.0.1:8080" + job["zip_url"])
+open("mockups.zip", "wb").write(z.content)
+```
+
+### Güvenlik
+
+**SSRF koruması.** `design_url` açık bir kapıdır: kötü niyetli bir istek
+sunucunun iç ağına yönlendirilebilir — bulut metadata servisi
+(169.254.169.254), yereldeki ComfyUI (127.0.0.1:8188), LAN'daki başka
+servisler. Şema http/https ile sınırlı ve host'un çözümlenen **tüm**
+adresleri özel/loopback/link-local kontrolünden geçiyor.
+
+Tamamen kapatmak için: `MOCKUP_ALLOW_URL_FETCH=0`
+
+**Diğer kontroller:** yükleme boyutu sınırı, `cv2.imdecode` ile gerçek
+görüntü doğrulaması (uzantıya ve content-type'a güvenilmiyor), çıktı
+indirmede yol aşımı koruması, toplu istek adet sınırı, geçici dosyaların
+`BackgroundTask` ile otomatik temizliği, iş klasörleri için TTL.
+
+`allow_origins="*"` yalnızca yerel geliştirme içindir. Dışa açacaksan
+`MOCKUP_CORS` ile daralt ve önüne kimlik doğrulama koy — **bu API'de
+kimlik doğrulama yoktur.**
+
+### Ayarlar (ortam değişkeni)
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `MOCKUP_WORKERS` | 4 | eşzamanlı render sayısı |
+| `MOCKUP_MAX_UPLOAD_MB` | 40 | yükleme boyut sınırı |
+| `MOCKUP_MAX_BATCH` | 50 | toplu istekte azami öğe |
+| `MOCKUP_JOB_TTL` | 3600 | çıktıların saklanma süresi (sn) |
+| `MOCKUP_ALLOW_URL_FETCH` | 1 | `design_url` desteği |
+| `MOCKUP_CORS` | `*` | izinli origin listesi |
+
+### Neden ThreadPool, ProcessPool değil
+
+OpenCV ve NumPy ağır işlemlerde GIL'i bırakıyor, yani thread'ler gerçek
+paralellik veriyor. ProcessPool Windows'ta spawn + pickle maliyeti
+getirir ve `--reload` ile sorun çıkarır.
+
+### Bilinen performans sınırı
+
+Ölçüm (1400×1800 base, `test-model`):
+
+```
+load_model()       137 ms   (%6)
+saf compositing   2005 ms   (%94)
+toplam            2141 ms
+```
+
+Darboğaz model yükleme değil, compositing. `cv2.remap` tuvalin
+tamamını işliyor ama tasarım karenin ~%10'unu kaplıyor. Displacement'ı
+baskı alanının sınırlayıcı kutusuyla sınırlamak 5-8× hızlanma verir.
+25 mockup şu an ~54 saniye.
+
+---
+
+## Toplu üretim (batch.py)
+
+Tasarım × model × renk çapraz çarpımı.
+
+```bash
+python batch.py tasarim.png --colors white,black,navy
+python batch.py --designs tasarimlar --models all --colors all
+python batch.py --designs tasarimlar --product bella-canvas-3001 --colors all
+python batch.py --designs tasarimlar --colors all --dry-run   # sadece plan
+```
+
+Çıktı: `outputs/batch/<zaman-damgasi>/<tasarim-adi>/<model>-<renk>.png`
+Yanında `manifest.json` — hangi dosya hangi model/renk, süreler, hatalar.
+
+### Renkler klasör değildir
+
+`recolor.py` beş rengi **çalışma anında** tek beyaz base'den türetiyor.
+Kütüphanede renk başına asset tutulmuyor. Model id ise kütüphaneye göre
+göreli yoldur:
+
+```
+--models bella-canvas-3001/pose-01-front     doğru
+--models bella-canvas-3001                   yanlış (bu bir ürün, model değil)
+--product bella-canvas-3001                  ürünün tüm pozları için bunu kullan
+```
+
+### Paralellik ayarı
+
+OpenCV **zaten kendi içinde çok çekirdekli**. N worker × her biri tüm
+çekirdekler = thread boğuşması. Ölçüm (tek çekirdekli makine, 5 mockup):
+
+| Worker | OpenCV thread | Süre |
+|---|---|---|
+| 4 | otomatik | 26.5 sn |
+| 1 | 1 | 9.7 sn |
+
+`batch.py` ve `server.py` artık worker sayısını çekirdek sayısına göre
+belirliyor ve OpenCV thread'lerini worker'lara bölüyor. Elle ezmek için
+`--workers` / `MOCKUP_WORKERS`.
