@@ -1,0 +1,31 @@
+{
+  "id": "test-model",
+  "label": "Test Model (sentetik)",
+  "synthetic": true,
+  "gender": "unisex",
+  "pose": "front",
+  "environment": "studio",
+  "garment_color": "white",
+  "license": "dahili test varligi - yayinlanamaz",
+
+  "print_quad": [
+    [488, 486],
+    [912, 486],
+    [922, 1064],
+    [478, 1064]
+  ],
+
+  "design_scale": 0.92,
+
+  "displacement": {
+    "strength": 14.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+
+  "shading": {
+    "strength": 0.85
+  },
+
+  "edge_feather": 0
+}

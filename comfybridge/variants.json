@@ -1,0 +1,79 @@
+{
+  "_not": [
+    "Z-Image Turbo damitilmis bir model: cfg=1.0, yani guidance kapali.",
+    "Negatif istem PRATIKTE ETKISIZ. 'no logo, no print' gibi kisitlar",
+    "negatife yazilirsa hicbir sey yapmaz -- bu yuzden hepsi pozitif",
+    "istemin icinde OLUMLU ifadeyle yer aliyor: 'plain unprinted',",
+    "'blank empty chest', 'smooth undecorated fabric'.",
+    "",
+    "Isik tarifi kritik: displace.png ve shading.png haritalari",
+    "fotograftaki golgelerden turetiliyor. Duz isik = bos harita =",
+    "etkisiz displacement. Yonlu yan isik sart."
+  ],
+
+  "product": "bella-canvas-3001",
+
+  "prompt_template": "Editorial apparel product photograph, front view. {subject} wearing a plain unprinted white cotton crew neck t-shirt, retail fit, ribbed collar band, set-in short sleeves, visible side seams. The chest is completely blank and empty, smooth undecorated fabric, clean unmarked cotton surface across the entire front. FRAMING: {framing}. FABRIC: natural cotton wrinkles and creases across the chest and waist, soft vertical fold lines from the drape, gentle gathering near the waist, visible cotton weave texture, believable fabric weight. POSE: {pose}. SCENE: {environment}. LIGHTING: directional soft key light from the upper left at 45 degrees with weaker fill from the right, fabric folds cast well-defined soft shadows with clear gradation across the chest, preserved highlight detail in the white cotton. CAMERA: 85mm lens at f/5.6, sharp focus across the whole garment, commercial apparel photography, crisp fabric detail, natural skin texture.",
+
+  "defaults": {
+    "framing": "cropped from just below the chin to mid-hip, torso fills the frame, both shoulders and upper arms visible, arms relaxed slightly away from the body so the underarm seams separate cleanly from the torso",
+    "environment": "seamless studio backdrop in warm mid-grey, clearly darker in value than the white shirt so the garment silhouette separates cleanly, no props, no furniture",
+    "width": 1024,
+    "height": 1536,
+    "steps": 8,
+    "cfg": 1.0,
+    "shift": 3.0
+  },
+
+  "variants": [
+    {
+      "id": "female-front-001",
+      "gender": "female",
+      "pose_label": "front",
+      "subject": "a woman aged 25-32 with a natural realistic body",
+      "pose": "relaxed confident standing posture with slight natural asymmetry, one shoulder marginally lower, weight shifted onto one leg, hands relaxed at hip level, hair kept away from the chest area",
+      "seed": 101
+    },
+    {
+      "id": "female-front-002",
+      "gender": "female",
+      "pose_label": "front",
+      "subject": "a woman aged 28-35 with a natural realistic body",
+      "pose": "standing squarely facing the camera, arms loosely at the sides, shoulders relaxed and slightly rolled back, calm neutral stance",
+      "seed": 102
+    },
+    {
+      "id": "female-threequarter-003",
+      "gender": "female",
+      "pose_label": "three-quarter",
+      "subject": "a woman aged 24-30 with a natural realistic body",
+      "pose": "turned about 20 degrees to her left in a three-quarter stance, chest still clearly facing the camera, one hand resting near the hip, relaxed shoulders",
+      "seed": 103
+    },
+    {
+      "id": "male-front-001",
+      "gender": "male",
+      "pose_label": "front",
+      "subject": "a man aged 27-35 with a natural realistic build",
+      "pose": "relaxed standing posture, arms loosely at the sides and slightly away from the torso, shoulders level, weight evenly distributed",
+      "seed": 201
+    },
+    {
+      "id": "male-front-002",
+      "gender": "male",
+      "pose_label": "front",
+      "subject": "a man aged 30-40 with a natural realistic build",
+      "pose": "casual standing stance with a slight lean, one thumb hooked near a pocket, other arm relaxed, natural asymmetry in the shoulders",
+      "seed": 202
+    },
+    {
+      "id": "flat-hanger-001",
+      "gender": "none",
+      "pose_label": "flat",
+      "subject": "a plain white cotton crew neck t-shirt on a wooden hanger with no person",
+      "framing": "the entire shirt fills the frame from collar to hem, hanging naturally with the sleeves relaxed",
+      "pose": "hanging naturally from the hanger with soft gravity folds down the body of the shirt",
+      "seed": 301
+    }
+  ]
+}

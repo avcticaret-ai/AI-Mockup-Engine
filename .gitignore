@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+.vscode/
+.idea/
+
+# Büyük AI dosyaları
+*.safetensors
+*.ckpt
+*.pth
+
+# Çıktılar
+output/
+outputs/
+public/mockups/result*

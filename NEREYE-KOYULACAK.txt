@@ -1,0 +1,37 @@
+AI-Mockup-Engine  --  kurulum
+
+1) Bu klasoru butun olarak sunun altina cikar:
+
+       C:\AI\AI-Mockup-Engine\
+
+   Sonuc su olmali (check_layout.py KOKTE, cli.py ile AYNI seviyede):
+
+       C:\AI\AI-Mockup-Engine\check_layout.py
+       C:\AI\AI-Mockup-Engine\cli.py
+       C:\AI\AI-Mockup-Engine\mockup_engine\
+       C:\AI\AI-Mockup-Engine\comfybridge\
+       C:\AI\AI-Mockup-Engine\tools\
+       C:\AI\AI-Mockup-Engine\assets\base-library\
+
+   Eger eski bir AI-Mockup-Engine klasoru varsa ONCE SIL. Uzerine
+   kopyalama -- ic ice engine\ katmani kalirsa yapi yine bozulur.
+
+2) Dogrula:
+
+       cd C:\AI\AI-Mockup-Engine
+       python check_layout.py
+
+   "Yapi dogru" gormeden devam etme.
+
+3) Kur:
+
+       .\setup.ps1
+
+4) Test et (ComfyUI gerekmez, sentetik model ile):
+
+       python cli.py tasarimlar\test-design.png --model test-model
+
+   Cikti: outputs\mockup.png
+
+DIKKAT: Dosyalari TEK TEK indirmeyin. Klasor yapisi kaybolur ve
+hicbir sey import edilemez. Her zaman ZIP olarak cikarin.

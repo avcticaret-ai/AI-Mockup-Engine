@@ -1,0 +1,26 @@
+{
+  "id": "bella-canvas-3001/female-front-001",
+  "label": "Bella Canvas 3001 / kadin / on",
+  "brand": "Bella Canvas",
+  "model": "3001",
+  "color": "white",
+  "gender": "female",
+  "pose": "front",
+  "environment": "studio",
+  "source": "ai-generated",
+  "source_detail": "Nim / Nano Banana Pro 4K 2:3",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "2026-07-29",
+  "print_quad": [],
+  "design_scale": 0.9,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0
+}
