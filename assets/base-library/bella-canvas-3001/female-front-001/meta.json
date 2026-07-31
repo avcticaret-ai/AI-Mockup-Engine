@@ -1,0 +1,26 @@
+{
+  "id": "bella-canvas-3001/female-front-001",
+  "label": "Bella Canvas 3001 / kadin / on",
+  "brand": "Bella Canvas",
+  "model": "3001",
+  "color": "white",
+  "gender": "female",
+  "pose": "front",
+  "environment": "studio",
+  "source": "photographed",
+  "source_detail": "DOLDURULACAK: cekim tarihi, cekim yeri, model onayi",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "DOLDURULACAK",
+  "print_quad": [],
+  "design_scale": 0.95,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0
+}

@@ -158,10 +158,28 @@ def cloth_mask(bgr: np.ndarray) -> np.ndarray:
     out = remove(rgb, session=session, only_mask=True)
 
     mask = np.array(out)
+
+    # Cikti RGBA gelebiliyor. Kanal 0/1/2 ayni maskeyi tasiyor; kanal 3
+    # alfa ve her yerde 255 -- onu almak tum kareyi maske yapar (olculdu).
     if mask.ndim == 3:
-        # u2net_cloth_seg ust/alt/tam govde olarak 3 bant dondurebiliyor.
-        # Bize ust govde lazim -- ilk bant.
         mask = mask[..., 0]
+
+    # u2net_cloth_seg ucu segmenti DIKEY ISTIFLEYEREK donduruyor:
+    # ciktinin yuksekligi girdinin tam 3 kati ve siralama
+    #   [0]  ust govde   <- tisort, bize gereken bu
+    #   [1]  alt govde
+    #   [2]  tam govde
+    # Bunu kanal sanip mask[..., 0] almak, 3H satiri H'ye sikistirdigi
+    # icin kullanilamaz bir maske uretiyordu (olculdu: %14 kaplama,
+    # dogru bant ile %43).
+    h = bgr.shape[0]
+    if mask.shape[0] == h * 3:
+        mask = mask[:h]
+    elif mask.shape[0] != h:
+        raise SystemExit(
+            f"Beklenmeyen segmentasyon ciktisi: {mask.shape}, girdi yuksekligi {h}.\n"
+            "rembg surumu degismis olabilir; --method classic kullan."
+        )
 
     mask = np.where(mask > 127, 255, 0).astype(np.uint8)
     return fill_holes(largest_component(mask))

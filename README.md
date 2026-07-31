@@ -639,3 +639,80 @@ OpenCV **zaten kendi içinde çok çekirdekli**. N worker × her biri tüm
 `batch.py` ve `server.py` artık worker sayısını çekirdek sayısına göre
 belirliyor ve OpenCV thread'lerini worker'lara bölüyor. Elle ezmek için
 `--workers` / `MOCKUP_WORKERS`.
+
+---
+
+## Etsy çıktısı (export_etsy.py)
+
+```bash
+python tools/export_etsy.py outputs/batch/<zaman-damgasi>
+python tools/export_etsy.py <klasör> --shape portrait --format jpg
+```
+
+Etsy gereksinimleri (2026): en az **2000 piksel kısa kenar**, 1:1 kare
+veya 4:5 dikey, **sRGB**, JPG/PNG.
+
+Araç kırpma yapmaz — mockup'ın kenarını kesmek modeli budayabilir.
+Bunun yerine fon rengini kenar bandından örnekleyip dolgu yapar.
+
+### Çözünürlük — dikkat
+
+Kaynak 2000 pikselin altındaysa araç büyütür ve **uyarır.** Doğru çözüm
+burada büyütmek değil, base asset'i baştan yeterli çözünürlükte
+üretmektir: tasarım base çözünürlüğünde compose ediliyor, mockup'ı
+sonradan büyütmek kaybolan detayı geri getirmez.
+
+Bu yüzden `comfybridge/variants.json` çözünürlüğü **1024×1536'dan
+1536×2048'e** çıkarıldı. Kalan büyütme ~%30, Lanczos ile kabul
+edilebilir. Daha yükseğe çıkacaksan Z-Image çıktısının keskinliğini
+gözle kontrol et — model ~1024 civarında eğitildi.
+
+---
+
+## İlk publishable asset
+
+Gerçek Bella Canvas 3001 fotoğrafından yayınlanabilir asset üretmek için:
+**`SOP-GercekBC3001.md`**
+
+Hedef klasör `assets/base-library/bella-canvas-3001/female-front-001/`
+hazır bekliyor — `meta.json` fotoğraf yoluna göre ayarlandı
+(`source: photographed`), `print_quad` boş ve ölçümle doldurulacak.
+
+Yöntem `kalibrasyon/bella-ref` üzerinde uçtan uca doğrulandı: 34 kontrol,
+0 hata. Gerçek fotoğrafta değişecek tek şey kalibrasyon değerleridir
+(`displacement.strength`, `shading.strength`) — giyilmiş kumaş düz
+çekimden daha çok kırışır ve yönlü ışık gölge aralığını genişletir.
+
+### Kabul kriterleri
+
+`publishable: true` yapmadan önce hepsi geçmeli:
+
+| Ölçüm | Kabul |
+|---|---|
+| `garment_mask` kaplama | %25–60 |
+| Kıvrım std | > 6 (ideal > 15) |
+| Kıvrım/gürültü oranı | > 1.5 |
+| Gölge aralığı | > 50 seviye |
+| `print_mask` giysi dışına taşan | 0 piksel |
+| Render: baskı alanı dışında değişim | 0 piksel |
+
+Son ikisi sıfır tolerans — maskeleme doğruluğunu ölçüyorlar.
+
+### `--scale` davranışı
+
+`design_scale` tasarımın baskı alanı içindeki doluluk oranıdır.
+`1.0` = alanı tamamen kaplar.
+
+**1.0 üzeri değerler** tasarımı baskı alanının dışına taşırır ve
+`print_mask` fazlalığı kırpar. Teknik olarak çalışır, ama `print_quad`
+gerçek 12×16 inçten türetildiyse basılamayacak bir mockup üretir —
+tasarım gerçekte o kadar büyük basılamaz.
+
+`--scale` üç giriş noktasının hepsinde çalışır ve `meta.json`'daki değeri
+geçici olarak ezer:
+
+```bash
+python cli.py tasarim.png --model <model> --scale 0.85
+python batch.py --designs tasarimlar --models <model> --scale 0.85
+curl -F "scale=0.85" ...     # API, 0 < scale <= 2.0
+```

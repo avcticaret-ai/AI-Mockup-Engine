@@ -32,6 +32,11 @@ class CompositeSettings:
 
     # Tasarimin baski alani icindeki doluluk orani. 1.0 = alani tamamen
     # kaplar. Tisortte 0.85-0.95 daha dogal durur.
+    #
+    # 1.0 UZERI: tasarim baski alanini asar ve print_mask tarafindan
+    # kirpilir. Teknik olarak calisir ama GERCEK baski alanini yanlis
+    # gosterir -- print_quad gercek 12x16 incten turetildiyse 1.0 ustu
+    # bir deger, basilamayacak bir mockup uretir.
     design_scale: float = 1.0
 
     # Displacement gucu (piksel). Kumas ne kadar kirisiksa o kadar dusuk.
@@ -101,7 +106,21 @@ def _fit_contain(
     canvas = np.zeros((canvas_h, canvas_w, 4), dtype=design.dtype)
     x0 = (canvas_w - new_w) // 2
     y0 = (canvas_h - new_h) // 2
-    canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
+
+    # scale > 1.0 tasarimi tuvalden BUYUK yapar ve x0/y0 negatife duser.
+    # numpy negatif dilim baslangicini "sondan" diye yorumluyor, bu da
+    # yanlis sekle yazmaya calisip ValueError firlatiyordu:
+    #   could not broadcast (651,651,4) into (37,109,4)
+    # Tasan kismi kaynaktan kirpiyoruz; scale <= 1.0 yolunda hicbir sey
+    # degismiyor cunku orada sx0/sy0 zaten 0.
+    sx0, sy0 = max(0, -x0), max(0, -y0)
+    dx0, dy0 = max(0, x0), max(0, y0)
+    cw = min(new_w - sx0, canvas_w - dx0)
+    ch = min(new_h - sy0, canvas_h - dy0)
+
+    if cw > 0 and ch > 0:
+        canvas[dy0:dy0 + ch, dx0:dx0 + cw] = resized[sy0:sy0 + ch, sx0:sx0 + cw]
+
     return canvas
 
 

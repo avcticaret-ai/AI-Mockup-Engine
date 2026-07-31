@@ -1,0 +1,43 @@
+{
+  "id": "kalibrasyon/bella-ref",
+  "label": "bella-ref",
+  "brand": "",
+  "model": "",
+  "color": "",
+  "gender": "",
+  "pose": "",
+  "environment": "",
+  "source": "unknown",
+  "source_detail": "",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "2026-07-31",
+  "print_quad": [
+    [
+      433,
+      460
+    ],
+    [
+      766,
+      460
+    ],
+    [
+      766,
+      904
+    ],
+    [
+      433,
+      904
+    ]
+  ],
+  "design_scale": 0.9,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0
+}

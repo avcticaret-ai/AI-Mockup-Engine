@@ -8,23 +8,27 @@
     "",
     "Isik tarifi kritik: displace.png ve shading.png haritalari",
     "fotograftaki golgelerden turetiliyor. Duz isik = bos harita =",
-    "etkisiz displacement. Yonlu yan isik sart."
+    "etkisiz displacement. Yonlu yan isik sart.",
+    "",
+    "COZUNURLUK: Etsy listeleme gorseli icin kisa kenar >= 2000 px",
+    "gerekiyor. 1024 ile uretirsen her mockup ~%95 buyutulur ve",
+    "Etsy bulanik gorsellerde zoom u devre disi birakir. 1536x2048",
+    "ile kalan buyutme ~%30, Lanczos ile kabul edilebilir.",
+    "Z-Image ~1024 civarinda egitildi; 2048 uzeri deneyeceksen",
+    "ciktinin keskinligini gozle kontrol et, ya da ComfyUI icinde",
+    "bir upscale node u ekleyip 1024 te uretip 2x buyut."
   ],
-
   "product": "bella-canvas-3001",
-
   "prompt_template": "Editorial apparel product photograph, front view. {subject} wearing a plain unprinted white cotton crew neck t-shirt, retail fit, ribbed collar band, set-in short sleeves, visible side seams. The chest is completely blank and empty, smooth undecorated fabric, clean unmarked cotton surface across the entire front. FRAMING: {framing}. FABRIC: natural cotton wrinkles and creases across the chest and waist, soft vertical fold lines from the drape, gentle gathering near the waist, visible cotton weave texture, believable fabric weight. POSE: {pose}. SCENE: {environment}. LIGHTING: directional soft key light from the upper left at 45 degrees with weaker fill from the right, fabric folds cast well-defined soft shadows with clear gradation across the chest, preserved highlight detail in the white cotton. CAMERA: 85mm lens at f/5.6, sharp focus across the whole garment, commercial apparel photography, crisp fabric detail, natural skin texture.",
-
   "defaults": {
     "framing": "cropped from just below the chin to mid-hip, torso fills the frame, both shoulders and upper arms visible, arms relaxed slightly away from the body so the underarm seams separate cleanly from the torso",
     "environment": "seamless studio backdrop in warm mid-grey, clearly darker in value than the white shirt so the garment silhouette separates cleanly, no props, no furniture",
-    "width": 1024,
-    "height": 1536,
+    "width": 1536,
+    "height": 2048,
     "steps": 8,
     "cfg": 1.0,
     "shift": 3.0
   },
-
   "variants": [
     {
       "id": "female-front-001",
