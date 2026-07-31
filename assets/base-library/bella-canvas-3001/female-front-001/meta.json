@@ -12,7 +12,24 @@
   "verified_garment": false,
   "publishable": false,
   "created": "DOLDURULACAK",
-  "print_quad": [],
+  "print_quad": [
+    [
+      434,
+      330
+    ],
+    [
+      770,
+      330
+    ],
+    [
+      770,
+      777
+    ],
+    [
+      434,
+      777
+    ]
+  ],
   "design_scale": 0.95,
   "displacement": {
     "strength": 16.0,
@@ -22,5 +39,11 @@
   "shading": {
     "strength": 0.85
   },
-  "edge_feather": 0
+  "edge_feather": 0,
+  "print_area_inches": [
+    12.0,
+    16.0
+  ],
+  "pixels_per_inch": 27.95,
+  "garment_size": "M"
 }
