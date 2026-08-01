@@ -145,8 +145,13 @@ def warp_design(
     source = _fit_contain(design_rgba, src_w, src_h, scale)
 
     src_corners = np.array(
-        [[0, 0], [src_w - 1, 0], [src_w - 1, src_h - 1], [0, src_h - 1]],
-        dtype=np.float32,
+    [
+    [0, 0],
+    [src_w - 1, 0],
+    [src_w - 1, src_h - 1],
+    [0, src_h - 1],
+    ],
+    dtype=np.float32,
     )
     matrix = cv2.getPerspectiveTransform(src_corners, quad.astype(np.float32))
 

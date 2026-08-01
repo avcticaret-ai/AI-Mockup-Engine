@@ -133,7 +133,11 @@ def main() -> int:
     p.add_argument("--model", required=True, help="hedef model id")
     p.add_argument("--library", default=str(LIBRARY))
     p.add_argument("--size", default="M", help="giysi bedeni (derive_quad)")
-    p.add_argument("--method", choices=["auto", "classic", "cloth"], default="auto",
+    p.add_argument("--asset-type", choices=["auto", "human", "flatlay"],
+                   default="auto",
+                   help="urun fotografi tipi. auto: maskeleme sonucundan cikarilir")
+    p.add_argument("--method", choices=["auto", "classic", "cloth", "flatlay"],
+                   default="auto",
                    help="maskeleme yontemi; auto once classic dener")
     p.add_argument("--brand", default="Bella Canvas")
     p.add_argument("--garment-model", default="3001")
@@ -163,8 +167,21 @@ def main() -> int:
 
     # -- 2. maske -----------------------------------------------------------
     force = ["--force"] if args.force else []
-    methods = ["classic", "cloth"] if args.method == "auto" else [args.method]
+    # Sira: classic -> cloth -> flatlay. Human fotograflarinda ilk ikisi
+    # zaten basarili oldugu icin flatlay'e hic inilmiyor; mevcut davranis
+    # degismiyor.
+    if args.method != "auto":
+        methods = [args.method]
+    elif args.asset_type == "human":
+        # ADR: human ve flatlay bagimsiz pipeline'lar. Tip acikca
+        # verildiyse diger tipin yontemini hic denemiyoruz.
+        methods = ["classic", "cloth"]
+    elif args.asset_type == "flatlay":
+        methods = ["flatlay"]
+    else:
+        methods = ["classic", "cloth", "flatlay"]
     masked = False
+    used_method = None
     for method in methods:
         rc, out = run([sys.executable, str(TOOLS / "auto_mask.py"), args.model,
                        "--library", args.library, "--method", method,
@@ -172,6 +189,7 @@ def main() -> int:
                       f"2. auto_mask ({method})")
         if rc == 0 and "UYARI" not in out:
             masked = True
+            used_method = method
             break
         if method != methods[-1]:
             print(f"\n  {method} yetersiz, {methods[methods.index(method)+1]} deneniyor")
@@ -183,9 +201,26 @@ def main() -> int:
         return 1
 
     # -- 3. quad ------------------------------------------------------------
+    # asset_type'i kullanilan maskeleme yonteminden coz. ADR gerekliligi:
+    # meta.json asset_type alanini tasimali. "auto" verildiginde tip
+    # sonuctan cikariliyor -- flatlay yontemi flatlay fotografi demek.
+    asset_type = (args.asset_type if args.asset_type != "auto"
+                  else ("flatlay" if used_method == "flatlay" else "human"))
+    meta_path = model_dir / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["asset_type"] = asset_type
+    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+                         encoding="utf-8")
+    print(f"\n  asset_type: {asset_type}"
+          f"{'  (maskeleme yonteminden cikarildi)' if args.asset_type == 'auto' else ''}")
+
+    # Flatlay maskesi flatlay quad hesabi gerektiriyor: ustten cekimde
+    # BC3001 spec olculeri gecersiz (kollar yana yayilmis, hangi pikselin
+    # 20 inclik "width" oldugu belirsiz).
+    quad_args = ["--flatlay"] if asset_type == "flatlay" else []
     rc, _ = run([sys.executable, str(TOOLS / "derive_quad.py"), args.model,
-                 "--library", args.library, "--size", args.size],
-                "3. derive_quad")
+                 "--library", args.library, "--size", args.size] + quad_args,
+                f"3. derive_quad{' (flatlay)' if quad_args else ''}")
     quad_warned = rc != 0
 
     # -- 4. haritalar -------------------------------------------------------

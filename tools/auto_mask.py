@@ -37,7 +37,11 @@ import numpy as np
 ENGINE = Path(__file__).resolve().parent.parent
 LIBRARY = ENGINE / "assets" / "base-library"
 
-WORK_MAX = 1400  # segmentasyon bu çözünürlükte yapılır, sonra büyütülür
+WORK_MAX = 1400
+
+# Kabul edilebilir maske kaplama araligi (kare yuzdesi). auto modu
+# bir yontemin basarili sayilip sayilmayacagina buna gore karar veriyor.
+COVERAGE_MIN, COVERAGE_MAX = 15.0, 70.0  # segmentasyon bu çözünürlükte yapılır, sonra büyütülür
 
 
 # --------------------------------------------------------------------------
@@ -143,6 +147,88 @@ def classic_mask(bgr: np.ndarray, s_max: int, v_min: int, tolerance: int,
 # cloth (rembg)
 # --------------------------------------------------------------------------
 
+def flatlay_mask(bgr: np.ndarray, debug: dict | None = None) -> np.ndarray:
+    """Ustten cekilmis urun fotografi (Etsy tarzi flatlay).
+
+    Flatlay sahnesi genelde urunle AYNI RENKTE objelerle dolu: krem
+    tisort + krem dantel + krem carsaf + krem tote bag. Referans
+    fotografta dantel BGR[163,177,199], tisort BGR[175,191,209] --
+    neredeyse ayirt edilemez.
+
+    ONCEKI SURUM (Lab tohum genisletme) BU YUZDEN BASARISIZDI:
+    maske sag ustteki danteli giysi sandi, x=1094'e kadar uzadi
+    (kadraj 1152). Bu asimetri govde eksenini -37.6 dereceye cekti;
+    gercek aci ~-13. Sonucta baski tisortun disina, arka plana dustu.
+
+    Morfolojik acma denendi, dantel tisorte bitisik oldugu icin
+    ayrilmadi (3 iterasyonda bile tek bilesen).
+
+    SIMDIKI YONTEM: GrabCut.
+      1. Lab tohum genisletme ile kaba bir bolge bul
+      2. O bolgenin siniri GrabCut'a baslangic dikdortgeni olur
+      3. GrabCut renk dagilimini iteratif ayirir -- yakin renkleri
+         ayirmakta esik tabanli yontemden cok daha iyi
+
+    Referans fotografta sonuc: kutusu x 136-1094 -> x 230-929,
+    kadraj kenarina degme 77 px -> 0, govde acisi -37.6 -> -13.3.
+    """
+    h, w = bgr.shape[:2]
+    smooth = cv2.bilateralFilter(bgr, 9, 75, 75)
+    lab = cv2.cvtColor(smooth, cv2.COLOR_BGR2LAB).astype(np.float32)
+
+    ph, pw = max(20, h // 12), max(20, w // 12)
+    patch = lab[h // 2 - ph:h // 2 + ph, w // 2 - pw:w // 2 + pw].reshape(-1, 3)
+    ref = np.median(patch, axis=0)
+
+    k9 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    d = np.linalg.norm(lab - ref, axis=2)
+    seed = (d < 8.0).astype(np.uint8)
+    seed = cv2.morphologyEx(seed, cv2.MORPH_OPEN, k9)
+    seed = cv2.morphologyEx(seed, cv2.MORPH_CLOSE, k9, iterations=2)
+
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(seed)
+    if n < 2:
+        return np.zeros((h, w), np.uint8)
+    biggest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    core = labels == biggest
+
+    ys, xs = np.where(core)
+    # Baslangic dikdortgeni: kaba bolgenin sinirini biraz iceri cek.
+    # GrabCut disini kesin arka plan sayar, o yuzden fazla genis
+    # verirsek dantel yine iceri girer.
+    pad_x = int((xs.max() - xs.min()) * 0.04)
+    pad_y = int((ys.max() - ys.min()) * 0.04)
+    x0 = max(1, int(xs.min()) + pad_x)
+    y0 = max(1, int(ys.min()) + pad_y)
+    x1 = min(w - 2, int(xs.max()) - pad_x)
+    y1 = min(h - 2, int(ys.max()) - pad_y)
+    rect = (x0, y0, max(10, x1 - x0), max(10, y1 - y0))
+
+    gc = np.zeros((h, w), np.uint8)
+    bgd = np.zeros((1, 65), np.float64)
+    fgd = np.zeros((1, 65), np.float64)
+    try:
+        cv2.grabCut(bgr, gc, rect, bgd, fgd, 5, cv2.GC_INIT_WITH_RECT)
+    except cv2.error:
+        # GrabCut basarisiz olursa kaba bolgeye don -- hic maske
+        # uretmemekten iyidir, ama kullanici uyarilmali.
+        if debug is not None:
+            debug["grabcut_failed"] = True
+        return fill_holes(largest_component((core.astype(np.uint8)) * 255))
+
+    mask = np.where((gc == cv2.GC_FGD) | (gc == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+    k15 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k15, iterations=2)
+    mask = largest_component(mask)
+    mask = fill_holes(mask)
+
+    if debug is not None:
+        debug["seed_rect"] = rect
+        debug["core_coverage"] = float(core.mean() * 100)
+
+    return mask
+
+
 def cloth_mask(bgr: np.ndarray) -> np.ndarray:
     try:
         from rembg import new_session, remove
@@ -192,7 +278,9 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("model_id", help="ör. bella-canvas-3001/female-front-001")
     p.add_argument("--library", default=str(LIBRARY))
-    p.add_argument("--method", choices=["classic", "cloth"], default="classic")
+    p.add_argument("--method", choices=["classic", "cloth", "flatlay", "auto"],
+                   default="classic",
+                   help="auto: classic -> cloth -> flatlay sirasiyla dener")
     p.add_argument("--s-max", type=int, default=45,
                    help="tişört için üst doygunluk eşiği (0-255)")
     p.add_argument("--v-min", type=int, default=110,
@@ -223,10 +311,43 @@ def main() -> int:
 
     debug: dict = {} if args.debug else None
 
-    if args.method == "cloth":
-        mask = cloth_mask(work)
+    def run(method: str) -> np.ndarray:
+        if method == "cloth":
+            return cloth_mask(work)
+        if method == "flatlay":
+            return flatlay_mask(work, debug)
+        return classic_mask(work, args.s_max, args.v_min, args.tolerance, debug)
+
+    def coverage_of(m: np.ndarray) -> float:
+        return float((m > 127).sum()) / m.size * 100
+
+    used = args.method
+    if args.method == "auto":
+        # Sira: classic -> cloth -> flatlay. Ilk kabul edilebilir kaplamayi
+        # veren yontem kazanir. Human fotograflarinda classic veya cloth
+        # zaten basarili oldugu icin flatlay'e hic inilmiyor -- mevcut
+        # davranis degismiyor.
+        used = None
+        for candidate in ("classic", "cloth", "flatlay"):
+            try:
+                trial = run(candidate)
+            except SystemExit as err:
+                print(f"  {candidate}: atlandi ({err})")
+                continue
+            cov = coverage_of(trial)
+            ok = COVERAGE_MIN < cov < COVERAGE_MAX
+            print(f"  {candidate:<8} kaplama %{cov:.1f}  "
+                  f"{'kabul' if ok else 'yetersiz'}")
+            if ok:
+                mask, used = trial, candidate
+                break
+        if used is None:
+            print("\nHATA: hicbir yontem kabul edilebilir maske uretemedi.",
+                  file=sys.stderr)
+            print("Fotografi kontrol et veya esikleri elle ayarla.", file=sys.stderr)
+            return 1
     else:
-        mask = classic_mask(work, args.s_max, args.v_min, args.tolerance, debug)
+        mask = run(args.method)
 
     # Tam çözünürlüğe geri büyüt, kenarı temizle
     if scale < 1.0:
@@ -237,7 +358,8 @@ def main() -> int:
     cv2.imwrite(str(out_path), mask)
 
     print(f"\n{args.model_id}  ({fw}x{fh})")
-    print(f"  yöntem            : {args.method}")
+    print(f"  yöntem            : {used}"
+          f"{'  (auto ile secildi)' if args.method == 'auto' else ''}")
     print(f"  kare kaplama      : %{coverage:.1f}")
     print(f"  yazıldı           : {out_path}")
 

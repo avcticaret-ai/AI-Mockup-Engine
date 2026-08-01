@@ -1,0 +1,51 @@
+{
+  "id": "bella-canvas-3001/flatlay-001",
+  "label": "flatlay-001",
+  "brand": "Bella Canvas",
+  "model": "3001",
+  "color": "white",
+  "gender": "",
+  "pose": "",
+  "environment": "",
+  "source": "photographed",
+  "source_detail": "DOLDURULACAK",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "2026-08-01",
+  "design_scale": 0.95,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0,
+  "print_quad": [
+    [
+      406,
+      203
+    ],
+    [
+      745,
+      123
+    ],
+    [
+      851,
+      576
+    ],
+    [
+      512,
+      655
+    ]
+  ],
+  "quad_source": "auto-flatlay",
+  "print_area_inches": [
+    12.0,
+    16.0
+  ],
+  "garment_size": "M",
+  "layout": "flatlay",
+  "asset_type": "flatlay"
+}

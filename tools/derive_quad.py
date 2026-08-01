@@ -130,6 +130,97 @@ def garment_metrics(mask: np.ndarray) -> dict:
     }
 
 
+def flatlay_body_axis(mask: np.ndarray) -> tuple[float, float, float, dict]:
+    """Flatlay giysinin govde ekseni: x = slope*y + intercept, ve acisi.
+
+    YALNIZCA FLATLAY DALI KULLANIR. Human yolu bu fonksiyonu cagirmaz.
+
+    Yontem: KOLTUK ALTININ ALTINDAKI govde merkezlerine dogru uydurup
+    yukari ekstrapole etmek. Aci ve baski merkezi AYNI kaynaktan gelir;
+    ikisini ayri hesaplamak tutarsizlik yaratiyordu.
+
+    ELENEN YONTEMLER (referans flatlay uzerinde olculdu):
+
+      PCA          : -43.8 ... -55.9, erozyona gore kayiyor. Kollar yana
+                     acik oldugu icin ana eksen govde ekseni degil.
+      minAreaRect  : -27.4 ama OpenCV surumune gore aci konvansiyonu
+                     degisiyor, hangi kenarin govde oldugu belirsiz.
+      yaka->etek   : -21.8 ve MERKEZI 68-155 px SOLA kaydiriyordu.
+                     Sebep: bu fotografta tisort kadrajin ustunden
+                     kesilmis (maske y=0'da x 744-820 arasinda basliyor,
+                     yani gorunen sey yaka degil kesik sag omuz).
+                     Yaka bandi o kesik bolgeyi olcuyordu.
+
+    Koltuk alti alti temiz sinyal: kesik bolge yok, kollar dahil degil,
+    uzun aralikta olculuyor (referansta 446 piksel).
+    """
+    m = mask > 127
+    ys, xs = np.where(m)
+    if len(ys) == 0:
+        return 0.0, 0.0, 0.0, {"reason": "bos maske"}
+
+    y0, y1 = int(ys.min()), int(ys.max())
+    height = y1 - y0 + 1
+
+    widths = np.array([
+        (np.where(m[y])[0].max() - np.where(m[y])[0].min() + 1)
+        if m[y].any() else 0 for y in range(y0, y1 + 1)
+    ])
+    y_widest = y0 + int(np.argmax(widths))
+
+    armpit = y_widest
+    for y in range(y_widest, y1):
+        row = np.where(m[y])[0]
+        if len(row) == 0:
+            continue
+        if len(np.split(row, np.where(np.diff(row) > 1)[0] + 1)) > 1:
+            armpit = y
+            break
+
+    pts = []
+    lo = min(armpit + max(10, height // 40), y1 - 2)
+    hi = max(lo + 10, y1 - int(height * 0.08))
+    for yy in range(lo, min(hi, y1)):
+        row = np.where(m[yy])[0]
+        if len(row) == 0:
+            continue
+        blk = max(np.split(row, np.where(np.diff(row) > 1)[0] + 1), key=len)
+        pts.append((yy, blk.mean()))
+
+    if len(pts) < 10:
+        # Yeterli veri yok: dikey eksen varsay, giysi kutusunun merkezi.
+        return 0.0, float((xs.min() + xs.max()) / 2), 0.0, {
+            "reason": "yetersiz govde satiri", "n": len(pts)}
+
+    arr = np.array(pts, dtype=np.float64)
+    slope, intercept = np.polyfit(arr[:, 0], arr[:, 1], 1)
+    angle = float(np.degrees(np.arctan(slope)))
+
+    return float(slope), float(intercept), angle, {
+        "armpit": armpit, "y_widest": y_widest,
+        "fit_lo": int(arr[0, 0]), "fit_hi": int(arr[-1, 0]),
+        "range": (int(arr[0, 0]), int(arr[-1, 0])), "n": len(pts)}
+
+
+def rotate_quad(cx: float, cy: float, w: float, h: float,
+                angle_deg: float) -> list[list[int]]:
+    """Merkezi (cx,cy) olan w x h dikdortgeni angle_deg dondurur.
+
+    Ciktinin 4 nokta olmasi compositor icin yeterli: getPerspectiveTransform
+    keyfi dortgeni destekliyor, render mantigi degismiyor.
+    """
+    a = np.radians(angle_deg)
+    ca, sa = np.cos(a), np.sin(a)
+    corners = [(-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)]
+    out = []
+    for px, py in corners:
+        # Saat yonunun tersine donus; ekran koordinatinda y asagi.
+        rx = px * ca - py * sa
+        ry = px * sa + py * ca
+        out.append([int(round(cx + rx)), int(round(cy + ry))])
+    return out
+
+
 def finish(args, model_dir, meta_path, mask, quad, source, info=None,
            problems=None, metrics=None):
     """Onizleme yaz, kaliteyi olc, meta.json'a kaydet.
@@ -211,6 +302,16 @@ def main() -> int:
     p.add_argument("--collar-drop", type=float, default=COLLAR_DROP_IN)
     p.add_argument("--top-gap", type=float, default=TOP_GAP_IN)
     p.add_argument("--scale-from", choices=["auto", "width", "length"], default="auto")
+    p.add_argument("--flatlay", action="store_true",
+                   help="ustten cekim: spec olcusu yerine dogrudan oran kullan")
+    p.add_argument("--flatlay-angle", type=float,
+                   help="flatlay: govde acisini elle ver (derece, dikeyden)")
+    p.add_argument("--min-angle", type=float, default=2.0,
+                   help="flatlay: bu acinin altinda donus uygulanmaz")
+    p.add_argument("--flatlay-center", type=float, default=-0.10,
+                   help="flatlay: baski merkezi = koltukalti + oran*baski_yuksekligi")
+    p.add_argument("--flatlay-top", type=float, default=0.20,
+                   help="flatlay: baski ust kenari = giysi_ust + oran*yukseklik")
     p.add_argument("--top-y", type=int, help="baski ust kenari (piksel), hesabi ezer")
     p.add_argument("--center-x", type=int, help="baski merkezi (piksel), hesabi ezer")
 
@@ -265,6 +366,131 @@ def main() -> int:
                       })
 
     g = garment_metrics(mask)
+
+    # --- FLATLAY DALI -------------------------------------------------
+    # Ustten cekimde BC3001 spec olculeri gecersiz: tisort duz serili,
+    # kollar yana yayilmis, hangi piksel olcusunun spec'teki 20 inclik
+    # "width" oldugu belirsiz. Insan fotografinda govde genisligi giyen
+    # kisinin bedenine oturuyor, flatlay'de oturmuyor.
+    #
+    # Bu yuzden mutlak olcek (px/inc) hic hesaplanmiyor. Quad dogrudan
+    # orandan: govde genisliginin %60'i (12" baski / 20" giysi), yukseklik
+    # baski alaninin kendi en-boy oranindan.
+    #
+    # Insan dali bu koddan HIC etkilenmiyor -- --flatlay verilmezse
+    # asagidaki eski yol aynen calisiyor.
+    if args.flatlay:
+        # garment_metrics insan fotografi icin yazildi ve flatlay'de
+        # yaniltiyor: kollar yana yayildigi icin "koltuk alti" tespiti
+        # govde yerine kol acikligini buluyor. Ayrica flatlay'de giysi
+        # egik durabiliyor (referansta merkez 701 -> 429 kayiyor).
+        # Bu yuzden govde bolgesi burada AYRI olculuyor.
+        ys_, xs_ = np.where(mask > 127)
+        fy0, fy1 = int(ys_.min()), int(ys_.max())
+        fh = fy1 - fy0 + 1
+
+        # Govde: yukseklik boyunca en genis SUREKLI blogun tarandigi bant.
+        # Ust %25 yaka/omuz, alt %25 etek -- ikisi de govde genisligini
+        # temsil etmiyor. Orta bantta olcup medyan aliyoruz.
+        # Govde genisligi KOLTUK ALTININ BELIRGIN ALTINDAN olculur.
+        # Koltuk altina yakin satirlarda kollar hala govdeyle birlesik:
+        # referansta y=455'te 798 px olculuyordu, gercek govde ~580.
+        # Tek satir yerine bir bandin medyani aliniyor.
+        _s0, _i0, _a0, _d0 = flatlay_body_axis(mask)
+        _ap = _d0.get("armpit")
+        if _ap is not None:
+            lo_r = min(int(_ap + fh * 0.06), fy1 - 5)
+            hi_r = min(int(_ap + fh * 0.30), fy1 - 2)
+        else:
+            lo_r, hi_r = int(fy0 + fh * 0.45), int(fy0 + fh * 0.70)
+        rows = []
+        for yy in range(lo_r, max(lo_r + 5, hi_r)):
+            row = np.where(mask[yy] > 127)[0]
+            if len(row) == 0:
+                continue
+            blk = max(np.split(row, np.where(np.diff(row) > 1)[0] + 1), key=len)
+            rows.append((len(blk), int(blk.mean()), yy))
+        if not rows:
+            print("HATA: flatlay govde bolgesi olculemedi.", file=sys.stderr)
+            return 1
+
+        body = int(np.median([r[0] for r in rows]))
+        cx_auto = int(np.median([r[1] for r in rows]))
+
+        qw = body * (args.print_w / BC3001_SIZES[args.size][0])
+        qh = qw * (args.print_h / args.print_w)
+        cx = args.center_x if args.center_x is not None else cx_auto
+        # Dikey: govde bandinin ustunden basla. Yaka cukuru flatlay
+        # maskesinde kapali oldugu icin oran kullaniliyor.
+        # Dikey konum KOLTUK ALTINA gore. Giysi kutusunun tepesini
+        # referans almak kirilgan: bu fotografta tisort kadrajin
+        # ustunden kesilmis, yani kutunun tepesi omuz cizgisi degil.
+        # Koltuk alti maskede her zaman tespit edilebilen fiziksel bir
+        # isaret.
+        #
+        # -0.10 olculerek secildi (referans flatlay, quad'in giysi
+        # icinde kalan orani):
+        #   -0.20 %93.8   -0.15 %96.6   -0.10 %97.6
+        #   -0.05 %97.5    0.00 %96.0   +0.05 %93.9
+        _slope0, _inter0, _ang0, _diag0 = flatlay_body_axis(mask)
+        _armpit = _diag0.get("armpit")
+        if args.top_y is not None:
+            top = args.top_y
+        elif _armpit is not None:
+            top = int(round(_armpit + qh * args.flatlay_center - qh / 2.0))
+        else:
+            top = int(round(fy0 + fh * args.flatlay_top))
+        # Flatlay'de tisort kadraj icinde donebiliyor. Eksene paralel
+        # bir quad tasarimi tisorte gore YAMUK gosteriyordu. Quad'i
+        # govde eksenine hizaliyoruz -- compositor'un mevcut perspektif
+        # warp'i keyfi dortgeni zaten destekliyor, render mantigi
+        # degismiyor.
+        slope, intercept, angle, diag = flatlay_body_axis(mask)
+        if args.flatlay_angle is not None:
+            angle = args.flatlay_angle
+        quad_cy = top + qh / 2.0
+        # Merkez, quad'in KENDI dikey konumunda eksen uzerinde.
+        # Sabit bir bant medyani kullanmak donuk giyside yanlis yer
+        # veriyordu: govde merkezi yukseklige gore kayiyor.
+        if args.center_x is None and diag.get("reason") is None:
+            # Eksen KOLTUK ALTI ALTINDAN uyduruluyor; baski alani ise
+            # gogus hizasinda, yani olcum araliginin USTUNDE. Serbest
+            # ekstrapolasyon hata biriktiriyor: referansta y=302'ye
+            # uzatmak merkezi 32 px fazla saga tasidi (%94.5 -> dx=-60
+            # ile %97.8). Bu yuzden olcum araliginin disina cikildiginda
+            # eksen sabit devam ediyor.
+            eval_y = max(quad_cy, float(diag.get("fit_lo", quad_cy)))
+            cx = intercept + slope * eval_y
+        if abs(angle) < args.min_angle:
+            # Kucuk aci: donusu uygulamak yuvarlama gurultusu disinda
+            # bir sey degistirmez. Duz flatlay davranisi korunuyor.
+            quad = [[int(round(cx - qw / 2)), int(top)],
+                    [int(round(cx + qw / 2)), int(top)],
+                    [int(round(cx + qw / 2)), int(round(top + qh))],
+                    [int(round(cx - qw / 2)), int(round(top + qh))]]
+            applied = 0.0
+        else:
+            quad = rotate_quad(cx, quad_cy, qw, qh, angle)
+            applied = angle
+
+        print(f"\n{args.model_id}")
+        print("  FLATLAY MODU -- spec olcusu kullanilmadi")
+        print(f"  giysi           : y {fy0}-{fy1}  yukseklik {fh} px")
+        print(f"  govde genisligi : {body} px  (orta bant medyani)")
+        print(f"  govde merkezi   : x {cx_auto}")
+        print(f"  baski/giysi oran: %{args.print_w / BC3001_SIZES[args.size][0] * 100:.0f}")
+        print(f"  baski alani     : {qw:.0f} x {qh:.0f} px")
+        print(f"  govde acisi     : {angle:+.2f} derece (dikeyden)")
+        print(f"  uygulanan donus : {applied:+.2f} derece"
+              f"{'  (esik alti, atlandi)' if applied == 0.0 and abs(angle) >= 0.01 else ''}")
+        print(f"  print_quad      : {quad}")
+
+        return finish(args, model_dir, meta_path, mask, quad,
+                      source="auto-flatlay",
+                      metrics={"guides": [fy0, fy1],
+                               "meta": {"print_area_inches": [args.print_w, args.print_h],
+                                        "garment_size": args.size,
+                                        "layout": "flatlay"}})
 
     w_in, l_in = BC3001_SIZES[args.size]
     if args.width:

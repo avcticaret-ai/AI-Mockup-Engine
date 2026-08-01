@@ -773,3 +773,152 @@ quad değişince yenilenmezse eski maske kalır.
 | ≥ %99.5 | geçti |
 | %95 – %99.5 | geçti + uyarı — `print_mask` zaten kırpıyor |
 | < %95 | hata |
+
+
+---
+
+## Flatlay asset desteği
+
+Üstten çekilmiş ürün fotoğrafları (Etsy tarzı flatlay) için üçüncü
+maskeleme yöntemi.
+
+```bash
+python tools/build_asset.py flatlay.png --model bella-canvas-3001/flatlay-001
+python tools/auto_mask.py <model> --method flatlay --debug
+python tools/derive_quad.py <model> --flatlay
+```
+
+`build_asset.py` ve `auto_mask.py --method auto` sırayla dener:
+
+```
+classic  →  cloth  →  flatlay  →  hata
+```
+
+Human fotoğraflarında ilk ikisi zaten başarılı olduğu için flatlay'e
+hiç inilmiyor; mevcut davranış değişmedi.
+
+### Neden ayrı bir yöntem
+
+Referans flatlay üzerinde ölçüldü (1152×920):
+
+| | L\* |
+|---|---|
+| tişört | 78.3 |
+| altındaki çarşaf | 76.2 |
+
+İki birim fark. `classic` fonu satır bazlı modelliyor ama flatlay'de fon
+düz değil — çarşaf kırışık ve üzerinde kitap, çanta, çiçek var. `cloth`
+ise insan üzerindeki giysi için eğitildi.
+
+Denenip elenen yöntemler:
+
+| Yöntem | Kaplama | Tişört | Fon sızıntısı |
+|---|---|---|---|
+| Sobel + closing + en büyük kontur | %99.2 | — | çöktü |
+| floodFill (bağlantı tabanlı) | %94.7 | %100 | %88 |
+| **Lab mesafe, iki geçişli** | **%37.6** | **%88** | **%0** |
+
+Kenar tabanlı yaklaşım çöküyor çünkü çarşafın kırışıkları tişört kenarı
+kadar güçlü gradyan üretiyor. floodFill sızıyor çünkü tişört çarşafa
+değiyor ve arada renk farkı yok.
+
+Çalışan yöntem: bilateral filtre → merkez tohum → dar eşikle güvenli
+çekirdek → çekirdeğin kendi istatistiğinden yeni eşik (gölgeli kolu
+yakalamak için) → kenar bariyeri → tek bileşen.
+
+### Flatlay quad hesabı
+
+Üstten çekimde BC3001 spec ölçüleri geçersiz: kollar yana yayılmış,
+hangi piksel ölçüsünün 20 inçlik "width" olduğu belirsiz. `--flatlay`
+mutlak ölçek hesaplamaz, doğrudan orandan gider:
+
+```
+quad_genişlik = gövde_genişliği × (12" / 20") = %60
+quad_yükseklik = quad_genişlik × 16/12
+```
+
+Gövde genişliği orta banttan (giysi yüksekliğinin %30–60'ı) medyanla
+ölçülür — üst %25 yaka/omuz, alt %25 etek, ikisi de gövdeyi temsil
+etmiyor.
+
+`--flatlay-top` dikey konumu ayarlar (varsayılan 0.20). İnsan yolu bu
+koddan hiç etkilenmiyor.
+
+`meta.json` içine `quad_source: "auto-flatlay"` yazılır.
+
+
+---
+
+## asset_type — çok ürünlü pipeline
+
+ADR-0002 gereği asset'ler tipe göre ayrılıyor. Şimdilik iki tip:
+`human` ve `flatlay`.
+
+```bash
+python tools/build_asset.py foto.png --model <id>                    # otomatik
+python tools/build_asset.py foto.png --model <id> --asset-type human
+python tools/build_asset.py foto.png --model <id> --asset-type flatlay
+```
+
+| `--asset-type` | Denenen maskeleme |
+|---|---|
+| `auto` (varsayılan) | classic → cloth → flatlay |
+| `human` | classic → cloth |
+| `flatlay` | flatlay |
+
+Tip açıkça verildiğinde diğer pipeline'ın yöntemi hiç denenmez —
+ADR'nin "human ile flatlay iki bağımsız pipeline" kuralı.
+
+`auto` modda tip maskeleme sonucundan çıkarılır ve `meta.json` içine
+`asset_type` olarak yazılır.
+
+### Klasör yapısı
+
+ADR'nin önerdiği yapı **kod değişikliği gerektirmiyor** —
+`library.py` model id'sini `rglob` ile göreli yol olarak çözüyor:
+
+```
+assets/base-library/
+  bella-canvas-3001/
+    human/
+      female-front-001/
+    flatlay/
+      flatlay-001/
+```
+
+Düz yerleşim de çalışmaya devam ediyor. **Mevcut asset'leri taşımak
+model id'lerini değiştirir** ve `batch.py --models`, `meta.json.id`,
+kayıtlı komutlar kırılır. Yeni asset'leri tipli klasöre koy, eskileri
+olduğu yerde bırak.
+
+
+### Flatlay: yön farkındalığı (ADR-0003 Faz 2)
+
+Flatlay fotoğraflarında tişört kadraj içinde dönebiliyor. Quad eksenlere
+paralel üretildiğinde tasarım tişörte göre yamuk görünüyordu.
+
+`--flatlay` artık gövde eksenini ölçüp quad'ı ona hizalıyor:
+
+```bash
+python tools/derive_quad.py <model> --flatlay
+python tools/derive_quad.py <model> --flatlay --flatlay-angle -15   # elle
+python tools/derive_quad.py <model> --flatlay --min-angle 5         # eşik
+```
+
+**Yöntem:** yaka bandı merkezinden etek bandı merkezine giden vektör.
+Fiziksel olarak gövde ekseninin tanımı budur ve konvansiyon yorumu
+gerektirmez.
+
+Elenen yöntemler (referans flatlay üzerinde ölçüldü):
+
+| Yöntem | Sonuç | Sorun |
+|---|---|---|
+| PCA | −43.8° … −55.9° | Erozyona göre kayıyor; kollar yayılımı bozuyor, anizotropi sadece 1.84 |
+| minAreaRect | −27.4° | OpenCV sürümüne göre açı konvansiyonu değişiyor, hangi kenarın gövde olduğu belirsiz |
+| **yaka→etek** | **−21.8°** | — |
+
+`--min-angle` (varsayılan 2°) altındaki açılarda dönüş uygulanmaz;
+**düz flatlay davranışı birebir korunur.**
+
+Compositor'un mevcut perspektif warp'ı keyfi dörtgeni zaten
+destekliyor — **render mantığı değişmedi.**

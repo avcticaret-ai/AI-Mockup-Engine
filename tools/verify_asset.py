@@ -133,6 +133,20 @@ def main() -> int:
     n, _ = cv2.connectedComponents(m.astype(np.uint8))
     r.check("tek parca", n == 2, f"{n-1} bilesen")
 
+    # Maske kadraj kenarina genis temas ediyorsa muhtemelen komsu bir
+    # obje (carsaf, dantel, canta) icine sizmistir. Flatlay'de urun
+    # normalde kadrajin icinde durur.
+    #
+    # Bu kontrol olsaydi flatlay-001'in bozuk maskesi yakalanirdi:
+    # ust kenarda 77 piksel temas vardi ve maske sag ustteki danteli
+    # giysi sayiyordu. Sessizce gecti, uc tur boyunca yanlis quad
+    # uretildi.
+    edge_px = int(m[0].sum() + m[-1].sum() + m[:, 0].sum() + m[:, -1].sum())
+    edge_limit = int(0.02 * (2 * W + 2 * H))
+    if edge_px > edge_limit:
+        r.note("maske kadraj kenarina degiyor",
+               f"{edge_px} px (esik {edge_limit}) -- komsu obje sizmis olabilir")
+
     print("\n4. print_mask")
     r.check("giysi disina tasmiyor", int(((pm > 8) & ~m).sum()) == 0,
             f"{int(((pm > 8) & ~m).sum())} piksel")
@@ -205,7 +219,10 @@ def main() -> int:
                     f"%{pct:.1f} < %{QUAD_INSIDE_WARN:.0f}")
 
     qsrc = meta.get("quad_source")
-    r.check("quad_source alani var", qsrc in ("auto", "manual"), str(qsrc))
+    # "auto-flatlay" ustten cekim assetlerinin quad kaynagi. Kontrol
+    # mantigi degismedi, yalnizca gecerli deger listesi genisledi.
+    r.check("quad_source alani var",
+            qsrc in ("auto", "manual", "auto-flatlay"), str(qsrc))
     for k in ("design_scale", "displacement", "shading"):
         r.check(f"{k} mevcut", k in meta)
     pub = meta.get("publishable")
