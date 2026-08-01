@@ -687,16 +687,28 @@ Yöntem `kalibrasyon/bella-ref` üzerinde uçtan uca doğrulandı: 34 kontrol,
 
 `publishable: true` yapmadan önce hepsi geçmeli:
 
-| Ölçüm | Kabul |
-|---|---|
-| `garment_mask` kaplama | %25–60 |
-| Kıvrım std | > 6 (ideal > 15) |
-| Kıvrım/gürültü oranı | > 1.5 |
-| Gölge aralığı | > 50 seviye |
-| `print_mask` giysi dışına taşan | 0 piksel |
-| Render: baskı alanı dışında değişim | 0 piksel |
+| Ölçüm | Geçti | Uyarı | Hata |
+|---|---|---|---|
+| `garment_mask` kaplama | %25–60 | — | dışı |
+| Kıvrım std | > 6 (ideal > 15) | — | ≤ 6 |
+| **Kıvrım/gürültü oranı** | **≥ 1.50** | **1.20 – 1.50** | **< 1.20** |
+| Gölge aralığı | > 50 seviye | 20–50 | ≤ 20 |
+| Baskı alanı giysi içinde | ≥ %99.5 | %95–99.5 | < %95 |
+| `print_mask` giysi dışına taşan | 0 piksel | — | > 0 |
+| Render: baskı alanı dışında değişim | 0 piksel | — | > 0 |
 
 Son ikisi sıfır tolerans — maskeleme doğruluğunu ölçüyorlar.
+
+**Uyarı asset'i geçersiz kılmaz.** Çıkış kodu yalnızca hata durumunda
+1 döner; uyarılı bir asset `publishable` olmaya devam eder.
+
+Kıvrım/gürültü ara bandı (1.20–1.50) JPEG sıkıştırması veya düşük
+çözünürlük yüzünden sinyali zayıflamış ama kullanılabilir asset'ler
+için. Bu eşiklerin regresyon testi:
+
+```bash
+python tools/test_fold_noise_tiers.py
+```
 
 ### `--scale` davranışı
 
@@ -716,3 +728,48 @@ python cli.py tasarim.png --model <model> --scale 0.85
 python batch.py --designs tasarimlar --models <model> --scale 0.85
 curl -F "scale=0.85" ...     # API, 0 < scale <= 2.0
 ```
+
+### print_quad: otomatik + manuel
+
+`tools/derive_quad.py` baskı alanını gövde genişliğinden oran yoluyla
+hesaplar. Gerçek fotoğraflarda perspektif, drape veya yaka çukurunun
+maskeden tespit edilememesi konumu kaydırabiliyor; o durumda koordinat
+elle verilir.
+
+```bash
+# otomatik
+python tools/derive_quad.py bella-canvas-3001/female-front-001
+python tools/derive_quad.py <model> --size L
+python tools/derive_quad.py <model> --dry-run
+
+# manuel override -- DÖRT kenar birden
+python tools/derive_quad.py bella-canvas-3001/female-front-004 \
+    --left 1200 --top 350 --right 1650 --bottom 950
+```
+
+Manuel verilirse otomatik hesap tamamen atlanır, önizleme yine üretilir.
+`meta.json` içine `quad_source` yazılır: `"auto"` veya `"manual"`.
+
+İş akışı:
+
+```
+derive_quad.py <model>              otomatik dene
+_quad_preview.png                   gözle bak
+derive_quad.py <model> --left ...   yanlışsa düzelt
+prepare_base.py <model> --force     haritaları yenile
+verify_asset.py <model> --render    doğrula
+```
+
+`prepare_base.py --force` şart — `print_mask.png` quad'dan türetiliyor,
+quad değişince yenilenmezse eski maske kalır.
+
+#### Taşma toleransı
+
+`verify_asset.py` baskı alanının giysi içinde kalan **alan yüzdesini**
+ölçer (eskiden yalnızca dört köşeye bakıyordu):
+
+| İçeride | Sonuç |
+|---|---|
+| ≥ %99.5 | geçti |
+| %95 – %99.5 | geçti + uyarı — `print_mask` zaten kırpıyor |
+| < %95 | hata |

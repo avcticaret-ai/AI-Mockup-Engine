@@ -1,29 +1,47 @@
 #!/usr/bin/env python3
-"""garment_mask.png + giysi ölçüleri  ->  meta.json içinde print_quad
+"""garment_mask.png -> meta.json icinde print_quad
 
-    python tools/derive_quad.py bella-canvas-3001/flat-ref-001
-    python tools/derive_quad.py <model> --size L --preview
-    python tools/derive_quad.py <model> --top-y 460      # dikey konumu elle ver
+OTOMATIK (varsayilan)
+    python tools/derive_quad.py bella-canvas-3001/female-front-001
+    python tools/derive_quad.py <model> --size L
+    python tools/derive_quad.py <model> --top-y 460      # yalnizca dikey konum
+    python tools/derive_quad.py <model> --dry-run        # yazmadan gor
 
-NEDEN GEREKLİ
-    calibrate_quad.py quad'ı YAZAR ama HESAPLAMAZ. Şimdiye kadar her
-    asset için gövde genişliğini elle ölçüp inç'e çevirdim; asset başına
-    ~15 dakika ve hataya açık. Bir seferinde orta gövde genişliğini
-    kullandım -- gömlek aşağı doğru daraldığı için o ölçü giysi
-    spec'inde yok ve baskı alanı %60 küçük çıktı.
+MANUEL OVERRIDE
+    python tools/derive_quad.py bella-canvas-3001/female-front-004 \
+        --left 1200 --top 350 --right 1650 --bottom 950
 
-    Bu araç ölçeği İKİ bağımsız yoldan hesaplar (koltuk altı genişliği
-    ve giysi boyu), ikisinin uyumunu güven göstergesi olarak raporlar.
+    Dort kenar BIRDEN verilmeli. Verilirse otomatik hesap tamamen
+    atlanir; koordinatlar dogrudan print_quad olur. Onizleme yine
+    uretilir ve meta.json'a quad_source="manual" yazilir.
 
-YÖNTEM
-    ölçek        = koltuk_alti_px / giysi_genisligi_inc     (veya boydan)
-    baski_alani  = 12 x 16 inc x ölçek
-    ust_kenar    = giysi_ustu + (yaka_dususu + bosluk) x ölçek
+NEDEN MANUEL GEREKIYOR
+    Otomatik hesap giysinin duz serili oldugunu varsayan spec olculerine
+    dayaniyor. Gercek fotograflarda perspektif, drape ve yaka cukurunun
+    maskeden tespit edilememesi konumu kaydirabiliyor. Maske dogru olsa
+    bile baski alani yanlis oturuyorsa cozum onizlemeye bakip koordinati
+    elle vermek.
 
-    Yaka çukuru maskeden tespit EDİLEMEZ: auto_mask.py yaka deliğini
-    fill_holes ile kapatıyor, bu yüzden genişlik profilinde imza kalmıyor.
-    Bu yüzden yaka düşüşü giysi spec'inden geliyor ve --top-y ile
-    ezilebiliyor. --preview çıktısı 5 saniyede gözle doğrulamayı sağlıyor.
+IS AKISI
+    1. python tools/derive_quad.py <model>              otomatik dene
+    2. _quad_preview.png'ye bak
+    3. yanlissa: --left/--top/--right/--bottom ile duzelt
+    4. python tools/prepare_base.py <model> --force     haritalari yenile
+    5. python tools/verify_asset.py <model> --render    dogrula
+
+NEDEN BU ARAC VAR
+    calibrate_quad.py quad'i YAZAR ama HESAPLAMAZ. Once her asset icin
+    govde genisligi elle olculup inc'e cevriliyordu; asset basina ~15
+    dakika ve hataya acik.
+
+YONTEM
+    baski_px = (baski_inc / giysi_genisligi_inc) x olculen_govde_px
+
+    Mutlak px/inc kullanilmiyor: giysinin nasil sunuldugune bagli ve
+    referans fotografta iki tahmin %36 ayristi. Oran ise sunumdan
+    bagimsiz -- 12 inclik baski her zaman 20 inclik giysinin %60'idir.
+    Dikey konum ayri olcekten (boy) geliyor cunku askida cekimde yatay
+    ve dikey px/inc esit degil.
 """
 
 from __future__ import annotations
@@ -112,6 +130,73 @@ def garment_metrics(mask: np.ndarray) -> dict:
     }
 
 
+def finish(args, model_dir, meta_path, mask, quad, source, info=None,
+           problems=None, metrics=None):
+    """Onizleme yaz, kaliteyi olc, meta.json'a kaydet.
+
+    Otomatik ve manuel yol ayni fonksiyonu kullaniyor -- boylece
+    onizleme, dogrulama ve meta yazma davranisi iki yolda birebir ayni.
+    """
+    problems = list(problems or [])
+    m = mask > 127
+    H, W = mask.shape[:2]
+
+    qmask = np.zeros((H, W), np.uint8)
+    cv2.fillPoly(qmask, [np.array(quad, np.int32)], 255)
+    quad_px = int((qmask > 0).sum())
+    inside_pct = 100.0 * int(((qmask > 0) & m).sum()) / max(quad_px, 1)
+
+    if source == "manual":
+        print(f"\n{args.model_id}")
+        print("  MANUEL OVERRIDE -- otomatik hesap atlandi")
+        print(f"  print_quad      : {quad}")
+        if info:
+            print(f"  baski alani     : {info['genislik']} x {info['yukseklik']} px")
+
+    print(f"  giysi icinde    : %{inside_pct:.1f}")
+
+    if inside_pct < 95.0:
+        problems.append(
+            f"quad'in yalnizca %{inside_pct:.0f}'i giysi icinde")
+
+    if problems:
+        print("\n  UYARILAR:")
+        for pr in problems:
+            print(f"    - {pr}")
+
+    if args.preview:
+        prev = cv2.imread(str(model_dir / "base.png"), cv2.IMREAD_COLOR)
+        if prev is not None:
+            overlay = prev.copy()
+            cv2.fillPoly(overlay, [np.array(quad, np.int32)], (0, 220, 0))
+            prev = cv2.addWeighted(overlay, 0.25, prev, 0.75, 0)
+            cv2.polylines(prev, [np.array(quad, np.int32)], True, (0, 200, 0), 3)
+            for y in (metrics or {}).get("guides", []):
+                cv2.line(prev, (0, y), (W, y), (255, 160, 0), 2)
+            cv2.putText(prev, f"quad_source: {source}", (16, 34),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                        (0, 200, 0) if source == "auto" else (60, 160, 255), 2)
+            out = model_dir / "_quad_preview.png"
+            cv2.imwrite(str(out), prev)
+            print(f"\n  onizleme        : {out}")
+
+    if args.dry_run:
+        print("\n  --dry-run: meta.json degistirilmedi\n")
+        return 0
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta["print_quad"] = quad
+    meta["quad_source"] = source
+    if metrics:
+        meta.update(metrics.get("meta", {}))
+    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
+                         encoding="utf-8")
+    print("\n  meta.json guncellendi")
+    print(f"  quad_source     : {source}\n")
+
+    return 1 if problems else 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -128,6 +213,15 @@ def main() -> int:
     p.add_argument("--scale-from", choices=["auto", "width", "length"], default="auto")
     p.add_argument("--top-y", type=int, help="baski ust kenari (piksel), hesabi ezer")
     p.add_argument("--center-x", type=int, help="baski merkezi (piksel), hesabi ezer")
+
+    man = p.add_argument_group(
+        "manuel override",
+        "DORDU BIRDEN verilirse otomatik hesap tamamen atlanir ve bu "
+        "dikdortgen dogrudan print_quad olur. Onizleme yine uretilir.")
+    man.add_argument("--left", type=int, help="sol kenar (piksel)")
+    man.add_argument("--top", type=int, help="ust kenar (piksel)")
+    man.add_argument("--right", type=int, help="sag kenar (piksel)")
+    man.add_argument("--bottom", type=int, help="alt kenar (piksel)")
     p.add_argument("--preview", action="store_true", default=True)
     p.add_argument("--no-preview", dest="preview", action="store_false")
     p.add_argument("--dry-run", action="store_true", help="meta.json'a yazma")
@@ -143,6 +237,33 @@ def main() -> int:
         return 1
 
     mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+
+    # --- MANUEL OVERRIDE ---------------------------------------------
+    # Dort kenar birden verildiyse olcum ve olcek hesabi tamamen atlanir.
+    # Otomatik tahmin bazi gercek fotograflarda yanlis konumlaniyor
+    # (perspektif, giysinin sunumu, yaka cukurunun tespit edilememesi);
+    # o durumda kullanici onizlemeye bakip koordinati dogrudan veriyor.
+    manual = [args.left, args.top, args.right, args.bottom]
+    if any(v is not None for v in manual):
+        if any(v is None for v in manual):
+            eksik = [n for n, v in zip(("--left", "--top", "--right", "--bottom"),
+                                       manual) if v is None]
+            print(f"HATA: manuel override icin DORT kenar da gerekli. "
+                  f"Eksik: {', '.join(eksik)}", file=sys.stderr)
+            return 1
+        if args.left >= args.right or args.top >= args.bottom:
+            print("HATA: --left < --right ve --top < --bottom olmali.",
+                  file=sys.stderr)
+            return 1
+
+        quad = [[args.left, args.top], [args.right, args.top],
+                [args.right, args.bottom], [args.left, args.bottom]]
+        return finish(args, model_dir, meta_path, mask, quad,
+                      source="manual", info={
+                          "genislik": args.right - args.left,
+                          "yukseklik": args.bottom - args.top,
+                      })
+
     g = garment_metrics(mask)
 
     w_in, l_in = BC3001_SIZES[args.size]
@@ -221,54 +342,13 @@ def main() -> int:
             f"olcek tahminleri %{disagree:.0f} ayrisiyor. Fotografta perspektif "
             f"olabilir veya beden yanlis. --size ile dogru bedeni ver.")
 
-    m = mask > 127
-    H, W = mask.shape[:2]
-    outside = [(x, y) for x, y in quad
-               if not (0 <= x < W and 0 <= y < H and m[y, x])]
-    if outside:
-        problems.append(f"quad kosesi giysi disinda: {outside}")
-
-    qmask = np.zeros((H, W), np.uint8)
-    cv2.fillPoly(qmask, [np.array(quad, np.int32)], 255)
-    inside_frac = (qmask > 0)[m].sum() / max((qmask > 0).sum(), 1)
-    if inside_frac < 0.95:
-        problems.append(f"quad'in yalnizca %{inside_frac*100:.0f}'i giysi icinde")
-
-    if problems:
-        print("\n  UYARILAR:")
-        for pr in problems:
-            print(f"    - {pr}")
-
-    if args.preview:
-        prev = cv2.imread(str(model_dir / "base.png"), cv2.IMREAD_COLOR)
-        if prev is not None:
-            overlay = prev.copy()
-            cv2.fillPoly(overlay, [np.array(quad, np.int32)], (0, 220, 0))
-            prev = cv2.addWeighted(overlay, 0.25, prev, 0.75, 0)
-            cv2.polylines(prev, [np.array(quad, np.int32)], True, (0, 200, 0), 3)
-            cv2.line(prev, (0, g["y0"]), (W, g["y0"]), (255, 160, 0), 2)
-            if g["armpit_row"]:
-                cv2.line(prev, (0, g["armpit_row"]), (W, g["armpit_row"]),
-                         (255, 160, 0), 2)
-            out = model_dir / "_quad_preview.png"
-            cv2.imwrite(str(out), prev)
-            print(f"\n  onizleme        : {out}")
-            print("  Yesil dikdortgen baski alani, turuncu cizgiler olcum hatlari.")
-
-    if args.dry_run:
-        print("\n  --dry-run: meta.json degistirilmedi\n")
-        return 0
-
-    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    meta["print_quad"] = quad
-    meta["print_area_inches"] = [args.print_w, args.print_h]
-    meta["pixels_per_inch"] = round(ppi, 2)
-    meta["garment_size"] = args.size
-    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
-                         encoding="utf-8")
-    print(f"\n  meta.json guncellendi\n")
-
-    return 1 if problems else 0
+    guides = [g["y0"]] + ([g["armpit_row"]] if g["armpit_row"] else [])
+    return finish(args, model_dir, meta_path, mask, quad, source="auto",
+                  problems=problems,
+                  metrics={"guides": guides,
+                           "meta": {"print_area_inches": [args.print_w, args.print_h],
+                                    "pixels_per_inch": round(ppi, 2),
+                                    "garment_size": args.size}})
 
 
 if __name__ == "__main__":

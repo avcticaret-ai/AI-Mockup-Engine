@@ -1,0 +1,50 @@
+{
+  "id": "bella-canvas-3001/female-front-004",
+  "label": "female-front-004",
+  "brand": "Bella Canvas",
+  "model": "3001",
+  "color": "white",
+  "gender": "",
+  "pose": "",
+  "environment": "",
+  "source": "photographed",
+  "source_detail": "DOLDURULACAK",
+  "verified_garment": false,
+  "publishable": false,
+  "created": "2026-07-31",
+  "design_scale": 0.95,
+  "displacement": {
+    "strength": 16.0,
+    "blur": 9,
+    "mode": "gradient"
+  },
+  "shading": {
+    "strength": 0.85
+  },
+  "edge_feather": 0,
+  "print_quad": [
+    [
+      1450,
+      400
+    ],
+    [
+      1750,
+      400
+    ],
+    [
+      1750,
+      850
+    ],
+    [
+      1450,
+      850
+    ]
+  ],
+  "print_area_inches": [
+    12.0,
+    16.0
+  ],
+  "pixels_per_inch": 41.5,
+  "garment_size": "M",
+  "quad_source": "manual"
+}

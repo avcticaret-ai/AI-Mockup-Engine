@@ -1,35 +1,17 @@
 {
   "id": "bella-canvas-3001/flat-ref-001",
-  "label": "BC3001 duz cekim referansi",
+  "label": "flat-ref-001",
   "brand": "Bella Canvas",
   "model": "3001",
   "color": "natural",
-  "gender": "unisex",
-  "pose": "flat",
-  "environment": "studio",
+  "gender": "",
+  "pose": "",
+  "environment": "",
   "source": "internet-reference",
-  "source_detail": "kalibrasyon/gelistirme referansi. TICARI KULLANIM YOK, Etsy'ye yuklenemez. Gercek cekim female-front-001'e gidecek.",
+  "source_detail": "DOLDURULACAK",
   "verified_garment": false,
   "publishable": false,
   "created": "2026-07-31",
-  "print_quad": [
-    [
-      430,
-      459
-    ],
-    [
-      763,
-      459
-    ],
-    [
-      763,
-      903
-    ],
-    [
-      430,
-      903
-    ]
-  ],
   "design_scale": 0.95,
   "displacement": {
     "strength": 16.0,
@@ -39,5 +21,30 @@
   "shading": {
     "strength": 0.85
   },
-  "edge_feather": 0
+  "edge_feather": 0,
+  "print_quad": [
+    [
+      434,
+      371
+    ],
+    [
+      770,
+      371
+    ],
+    [
+      770,
+      818
+    ],
+    [
+      434,
+      818
+    ]
+  ],
+  "print_area_inches": [
+    12.0,
+    16.0
+  ],
+  "pixels_per_inch": 27.95,
+  "garment_size": "M",
+  "quad_source": "auto"
 }

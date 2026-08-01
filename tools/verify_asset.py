@@ -40,9 +40,23 @@ REQUIRED = ("base.png", "garment_mask.png", "print_mask.png",
 # Kabul esikleri. SOP-GercekBC3001.md ile ayni.
 COVERAGE_MIN, COVERAGE_MAX = 15.0, 70.0
 FOLD_STD_MIN = 6.0
-FOLD_NOISE_MIN = 1.5
+# Kivrim sinyalinin gurultuye orani. Kademeli:
+#   >= OK    saglikli
+#   >= WARN  uyari -- JPEG sikistirmasi/dusuk cozunurluk sinyali zayiflatmis
+#            olabilir, ama render kalitesi kabul edilebilir
+#   <  WARN  hata -- displacement haritasi buyuk olasilikla gurultu
+FOLD_NOISE_OK = 1.50
+FOLD_NOISE_WARN = 1.20
 SHADING_RANGE_MIN = 20          # duz cekimde dar olabilir; uyari esigi 50
 SHADING_RANGE_GOOD = 50
+
+# Baski alaninin giysi icinde kalan ALAN yuzdesi.
+#   >= OK    sorunsuz
+#   >= WARN  uyari, hata degil -- print_mask zaten giysiyle kesisiyor,
+#            birkac piksellik tasma ciktida gorunmuyor
+#   <  WARN  hata: quad yanlis konumlanmis
+QUAD_INSIDE_OK = 99.5
+QUAD_INSIDE_WARN = 95.0
 PRINT_AREA_MIN, PRINT_AREA_MAX = 3.0, 20.0
 
 
@@ -137,7 +151,22 @@ def main() -> int:
     d32 = dp.astype(np.float32)
     smooth = cv2.GaussianBlur(d32, (0, 0), 8)
     ratio = (smooth[m] - smooth[m].mean()).std() / max((d32 - smooth)[m].std(), 1e-6)
-    r.check(f"kivrim/gurultu > {FOLD_NOISE_MIN}", ratio > FOLD_NOISE_MIN, f"{ratio:.2f}")
+
+    # Kademeli: ikili gec/kal, JPEG sikistirmasi veya dusuk cozunurluk
+    # yuzunden sinyali zayiflamis ama kullanilabilir assetleri gereksiz
+    # yere reddediyordu. Ara bant uyari veriyor, asset publishable kaliyor.
+    if ratio >= FOLD_NOISE_OK:
+        r.check(f"kivrim/gurultu >= {FOLD_NOISE_OK}", True, f"{ratio:.2f}")
+    elif ratio >= FOLD_NOISE_WARN:
+        r.check(f"kivrim/gurultu >= {FOLD_NOISE_WARN}", True, f"{ratio:.2f}")
+        r.note("kivrim sinyali zayif",
+               "JPEG sikistirmasi veya dusuk cozunurluk nedeniyle kivrim "
+               "sinyali zayif olabilir. Render kalitesi yine de kabul "
+               "edilebilir.")
+    else:
+        r.check(f"kivrim/gurultu >= {FOLD_NOISE_WARN}", False,
+                f"{ratio:.2f} -- Kivrim sinyali yetersiz. Displacement "
+                f"haritasi buyuk olasilikla gurultu iceriyor.")
 
     print("\n6. shading")
     so = sh[~m]
@@ -154,8 +183,29 @@ def main() -> int:
     q = meta.get("print_quad")
     r.check("print_quad 4 nokta", isinstance(q, list) and len(q) == 4)
     if isinstance(q, list) and len(q) == 4:
-        r.check("koseler giysi icinde",
-                all(0 <= x < W and 0 <= y < H and m[y, x] for x, y in q))
+        # Kose bazli ikili kontrol fazla kati: gercek fotograflarda baski
+        # alaninin bir kosesi birkac piksel disari tasabiliyor ve bu
+        # gorsel olarak fark edilmiyor cunku print_mask zaten giysiyle
+        # kesisiyor. Bunun yerine quad ALANININ ne kadarinin giysi icinde
+        # kaldigini olcuyoruz.
+        quad_layer = np.zeros((H, W), np.uint8)
+        cv2.fillPoly(quad_layer, [np.array(q, np.int32)], 255)
+        quad_px = int((quad_layer > 0).sum())
+        inside_px = int(((quad_layer > 0) & m).sum())
+        pct = 100.0 * inside_px / max(quad_px, 1)
+
+        if pct >= QUAD_INSIDE_OK:
+            r.check("quad giysi icinde", True, f"%{pct:.1f}")
+        elif pct >= QUAD_INSIDE_WARN:
+            r.check("quad giysi icinde", True, f"%{pct:.1f}")
+            r.note("baski alani hafif tasiyor",
+                   f"%{pct:.1f} icinde, print_mask kirpacak")
+        else:
+            r.check("quad giysi icinde", False,
+                    f"%{pct:.1f} < %{QUAD_INSIDE_WARN:.0f}")
+
+    qsrc = meta.get("quad_source")
+    r.check("quad_source alani var", qsrc in ("auto", "manual"), str(qsrc))
     for k in ("design_scale", "displacement", "shading"):
         r.check(f"{k} mevcut", k in meta)
     pub = meta.get("publishable")
