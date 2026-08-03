@@ -1,0 +1,109 @@
+AI MOCKUP ENGINE  --  TAM PAKET
+BUILD 2026.08.03-1
+
+===========================================================
+NEDEN TAM PAKET
+===========================================================
+
+Su ana kadar 10 ayri yama verildi. Hangi dosyanin hangi
+paketten geldigi karisti ve pipeline.py eski kaldi -- bu
+yuzden konumlandirma calismiyordu.
+
+Bu paket TUM projeyi iceriyor ve tum dosyalar AYNI SURUMDE.
+
+===========================================================
+KURULUM
+===========================================================
+
+1) Calisan sunucuyu durdur (uvicorn penceresinde Ctrl+C)
+
+2) Mevcut klasoru YEDEKLE, sonra bu paketi uzerine kopyala:
+
+     Rename-Item C:\AI\AI-Mockup-Engine C:\AI\AI-Mockup-Engine-yedek
+     # ZIP'i C:\AI\ altina cikar
+
+   Assetlerini kaybetmemek icin yedekten geri tasi:
+
+     Copy-Item C:\AI\AI-Mockup-Engine-yedek\assets\base-library\* `
+               C:\AI\AI-Mockup-Engine\assets\base-library\ -Recurse -Force
+     Copy-Item C:\AI\AI-Mockup-Engine-yedek\tasarimlar\* `
+               C:\AI\AI-Mockup-Engine\tasarimlar\ -Force
+
+   .venv de yedekten tasinabilir, yoksa .\setup.ps1 calistir.
+
+3) Dosya surumlerini dogrula:
+
+     cd C:\AI\AI-Mockup-Engine\web
+     .\dogrula.ps1
+
+   Uc dosya da 2026.08.03-1 gostermeli.
+
+4) Baslat:
+
+     .\baslat.ps1
+
+   Tarayici http://127.0.0.1:8090 adresinde acilir.
+
+5) Sag ustte "build 2026.08.03-1" gorunmeli.
+   Kirmizi uyari CIKMAMALI.
+
+===========================================================
+SURUM UYUMSUZLUGU ARTIK GORUNUR
+===========================================================
+
+Uc kritik dosya ayni BUILD damgasini tasiyor:
+  server.py
+  mockup_engine/pipeline.py
+  web/app.js
+
+Biri eskiyse arayuz acilista hangisi oldugunu yaziyor:
+
+  DOSYA SURUMLERI UYUMSUZ
+
+    ✓ web/app.js                   2026.08.03-1
+    ✗ server.py                    2026.07.30-2
+    ✓ mockup_engine/pipeline.py    2026.08.03-1
+
+  ✗ isaretli dosyalari paketten kopyala.
+
+Terminalden de bakilabilir:
+  curl http://127.0.0.1:8090/health
+  -> build_ok: true olmali
+
+===========================================================
+KONUMLANDIRMA NEDEN CALISMIYORDU
+===========================================================
+
+Is iki dosyaya bolunmus:
+  server.py     offset -> quad donusumunu yapar
+  pipeline.py   o quad'i render'da kullanir
+
+pipeline.py yalnizca bir pakette verilmisti. Eski kalinca
+server quad'i hesapliyor, X-Applied'a yaziyor (gorunuyor)
+ama pipeline yok sayiyordu (render degismiyordu).
+
+Bu paketle ikisi de guncel.
+
+===========================================================
+ARAYUZ
+===========================================================
+
+  surukle / ok tuslari / Shift+ok   konumlandirma
+  R / Shift+R                       dondurme
+  Ctrl+V                            panodan tasarim
+  Ctrl+Enter                        render
+  canli onizleme                    ayar degisince otomatik render
+  meta.json'a kaydet                konumu kalici yap
+  Ortala                            sifirla
+
+Turuncu "Ayarlar degisti" uyarisi cikarsa RENDER'a bas.
+
+===========================================================
+SORUN GIDERME
+===========================================================
+
+  .\dogrula.ps1     dosya surumleri
+  .\teshis.ps1      sunucu ve bagimliliklar
+  .\kontrol.ps1     arayuz dosya butunlugu
+
+Konumlandirma calismiyorsa once .\dogrula.ps1

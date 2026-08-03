@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Mockup Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>AI Mockup Studio</h1>
+  <div id="status" class="status status--wait">sunucu bekleniyor…</div>
+  <div class="spacer"></div>
+  <kbd title="Tasarımı panodan yapıştır">Ctrl+V</kbd>
+  <kbd title="Render">Ctrl+Enter</kbd>
+</header>
+
+<div class="workspace">
+
+  <aside class="panel">
+
+    <section>
+      <label class="section-label">Tasarım</label>
+      <div id="drop" class="drop">
+        <img id="designPreview" alt="" hidden>
+        <div id="dropText" class="drop__text">
+          <strong>Tasarımı buraya bırak</strong>
+          <span>tıkla · yapıştır (Ctrl+V) · PNG önerilir</span>
+        </div>
+      </div>
+      <input type="file" id="file" accept="image/png,image/webp,image/jpeg" hidden>
+      <div id="designInfo" class="hint"></div>
+    </section>
+
+    <section>
+      <label class="section-label" for="models">Base model</label>
+      <select id="models"></select>
+      <div id="modelPreviewWrap" class="model-preview" hidden>
+        <img id="modelPreview" alt="base model">
+      </div>
+      <div id="modelInfo" class="hint"></div>
+      <div id="incompleteInfo" class="hint"></div>
+    </section>
+
+    <section>
+      <label class="section-label" for="color">Renk</label>
+      <select id="color"></select>
+    </section>
+
+    <section>
+      <label class="section-label">Kalibrasyon</label>
+
+      <div class="slider">
+        <div class="slider__head"><span>Ölçek</span><output id="scaleOut">meta.json</output></div>
+        <input type="range" id="scale" min="0" max="3.0" step="0.01" value="0">
+      </div>
+
+      <div class="slider">
+        <div class="slider__head"><span>Kıvrım</span><output id="displaceOut">meta.json</output></div>
+        <input type="range" id="displace" min="-1" max="60" step="1" value="-1">
+      </div>
+
+      <div class="slider">
+        <div class="slider__head"><span>Gölge</span><output id="shadingOut">meta.json</output></div>
+        <input type="range" id="shading" min="-0.05" max="1" step="0.05" value="-0.05">
+      </div>
+
+      <div class="flip">
+        <button id="flipH" class="btn btn--ghost" title="Yatay aynala">⇄ Yatay</button>
+        <button id="flipV" class="btn btn--ghost" title="Dikey aynala">⇅ Dikey</button>
+      </div>
+
+      <button id="resetTuning" class="btn btn--ghost">Kalibrasyonu sıfırla</button>
+      <p class="hint">
+        Dokunulmayan değerler <code>meta.json</code>'dan gelir.
+        Ölçek 1.0 üzeri gerçek baskı alanını aşar.
+      </p>
+    </section>
+
+    <button id="render" class="btn btn--primary" disabled>RENDER</button>
+    <div id="stale" class="stale" hidden>Ayarlar değişti — RENDER'a bas</div>
+    <div id="error" class="error" hidden></div>
+
+  </aside>
+
+  <main class="canvas-area">
+
+    <section id="placeWrap" class="place" hidden>
+      <div class="place__head">
+        <label class="section-label">Yerleştirme</label>
+        <div class="spacer"></div>
+        <label class="chk"><input type="checkbox" id="autoRender" checked> canlı önizleme</label>
+        <button id="placeReset" class="btn btn--ghost">Ortala</button>
+        <button id="placeSave" class="btn btn--ghost">meta.json'a kaydet</button>
+      </div>
+      <div id="placeCanvas" class="place__canvas">
+        <img id="placeBase" class="base" alt="">
+        <div id="placeQuad" class="place__quad"></div>
+        <div id="guideV" class="guide guide--v"></div>
+        <div id="guideH" class="guide guide--h"></div>
+        <div id="placeDesign" class="place__design">
+          <img id="placeDesignImg" alt="">
+          <div id="placeRot" class="place__rot" title="Döndür"></div>
+        </div>
+      </div>
+      <div class="place__readout">
+        <span>X <b id="roX">0.00</b></span>
+        <span>Y <b id="roY">0.00</b></span>
+        <span>Açı <b id="roR">0°</b></span>
+        <span>Ölçek <b id="roS">meta</b></span>
+        <span class="spacer"></span>
+        <span>sürükle · ok tuşları · Shift+ok hızlı · R döndür</span>
+      </div>
+    </section>
+
+    <div class="stage-tools">
+      <div class="seg">
+        <button id="viewResult" class="seg__btn is-active" disabled>Mockup</button>
+        <button id="viewBase" class="seg__btn" disabled>Base</button>
+      </div>
+      <div class="spacer"></div>
+      <button id="zoomOut" class="btn btn--icon" disabled>&minus;</button>
+      <span id="zoomLabel" class="zoom-label">fit</span>
+      <button id="zoomIn" class="btn btn--icon" disabled>+</button>
+      <button id="zoomFit" class="btn btn--ghost" disabled>Sığdır</button>
+      <a id="download" class="btn btn--ghost" hidden download>PNG indir</a>
+    </div>
+
+    <div id="stage" class="stage">
+      <p id="stageEmpty" class="stage__empty">Tasarım yükle ve RENDER'a bas</p>
+      <img id="result" alt="mockup" hidden>
+      <div id="busy" class="busy" hidden><span class="spinner"></span>render ediliyor…</div>
+    </div>
+
+    <div class="stage-bar">
+      <span id="meta" class="hint"></span>
+    </div>
+
+    <section id="historyWrap" class="history" hidden>
+      <div class="history__head">
+        <label class="section-label">Geçmiş</label>
+        <button id="clearHistory" class="btn btn--ghost">Temizle</button>
+      </div>
+      <div id="history" class="history__strip"></div>
+      <p class="hint">Bir karta tıkla: görsel ve ayarları geri yükler.</p>
+    </section>
+
+  </main>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

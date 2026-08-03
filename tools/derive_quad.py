@@ -130,6 +130,22 @@ def garment_metrics(mask: np.ndarray) -> dict:
     }
 
 
+def garment_dims(args) -> tuple[float, float]:
+    """Giysinin (genislik, boy) olculeri, inc.
+
+    --garment-width / --garment-length verilirse ONLAR kullanilir.
+    Beden tablosu Bella Canvas 3001'e ait; baska marka veya oversize
+    kesim icin gecerli degil. Elindeki tisortu mezurayla olcup girmek
+    her zaman daha dogru:
+
+      genislik : koltuk altindan koltuk altina, duz serili
+      boy      : yakanin en yuksek noktasindan etek ucuna
+    """
+    w = args.garment_width if args.garment_width else BC3001_SIZES[args.size][0]
+    l = args.garment_length if args.garment_length else BC3001_SIZES[args.size][1]
+    return float(w), float(l)
+
+
 def flatlay_body_axis(mask: np.ndarray) -> tuple[float, float, float, dict]:
     """Flatlay giysinin govde ekseni: x = slope*y + intercept, ve acisi.
 
@@ -293,6 +309,11 @@ def main() -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("model_id")
     p.add_argument("--library", default=str(LIBRARY))
+    p.add_argument("--garment-width", type=float,
+                   help="giysinin GERCEK genisligi (inc, koltukalti-koltukalti). "
+                        "Verilirse --size tablosu kullanilmaz.")
+    p.add_argument("--garment-length", type=float,
+                   help="giysinin GERCEK boyu (inc, yaka-etek)")
     p.add_argument("--size", choices=list(BC3001_SIZES), default="M",
                    help="BC3001 bedeni (varsayilan M)")
     p.add_argument("--width", type=float, help="giysi genisligi inc (bedeni ezer)")
@@ -417,7 +438,7 @@ def main() -> int:
         body = int(np.median([r[0] for r in rows]))
         cx_auto = int(np.median([r[1] for r in rows]))
 
-        qw = body * (args.print_w / BC3001_SIZES[args.size][0])
+        qw = body * (args.print_w / garment_dims(args)[0])
         qh = qw * (args.print_h / args.print_w)
         cx = args.center_x if args.center_x is not None else cx_auto
         # Dikey: govde bandinin ustunden basla. Yaka cukuru flatlay
@@ -478,7 +499,7 @@ def main() -> int:
         print(f"  giysi           : y {fy0}-{fy1}  yukseklik {fh} px")
         print(f"  govde genisligi : {body} px  (orta bant medyani)")
         print(f"  govde merkezi   : x {cx_auto}")
-        print(f"  baski/giysi oran: %{args.print_w / BC3001_SIZES[args.size][0] * 100:.0f}")
+        print(f"  baski/giysi oran: %{args.print_w / garment_dims(args)[0] * 100:.0f}")
         print(f"  baski alani     : {qw:.0f} x {qh:.0f} px")
         print(f"  govde acisi     : {angle:+.2f} derece (dikeyden)")
         print(f"  uygulanan donus : {applied:+.2f} derece"
@@ -492,7 +513,7 @@ def main() -> int:
                                         "garment_size": args.size,
                                         "layout": "flatlay"}})
 
-    w_in, l_in = BC3001_SIZES[args.size]
+    w_in, l_in = garment_dims(args)
     if args.width:
         w_in = args.width
     if args.length:
@@ -548,7 +569,8 @@ def main() -> int:
     print(f"  en genis satir : y {g['widest_row']}  {g['widest_width']} px (kol ucu)")
     print(f"  koltuk alti    : y {g['armpit_row']}")
     print(f"  govde genisligi: {g['armpit_width']} px  (y {g['probe_row']})")
-    print(f"  beden {args.size:<3}      : {w_in} x {l_in} inc")
+    _src = "olculdu" if (args.garment_width or args.garment_length) else f"beden {args.size}"
+    print(f"  giysi olcusu   : {w_in} x {l_in} inc  ({_src})")
     print()
     print(f"  olcek (genislik): {ppi_w:6.1f} px/inc")
     print(f"  olcek (boy)     : {ppi_l:6.1f} px/inc")

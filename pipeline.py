@@ -15,7 +15,6 @@ import numpy as np
 # Quad override (offset_x/offset_y/rotate) BURADA uygulaniyor; server.py
 # yeni ama pipeline.py eskiyse istek sessizce yok sayiliyordu.
 QUAD_OVERRIDE_SUPPORTED = True
-BUILD = "2026.08.03-3"
 
 from .compositor import CompositeSettings, render
 from .library import BaseModel, LibraryError, load_model

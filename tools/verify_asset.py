@@ -57,6 +57,11 @@ SHADING_RANGE_GOOD = 50
 #   <  WARN  hata: quad yanlis konumlanmis
 QUAD_INSIDE_OK = 99.5
 QUAD_INSIDE_WARN = 95.0
+
+# Giysi maskesinde sol-sag alan farki bu yuzdeyi asarsa uyari.
+# Insan fotografinda iki kol benzer alan kaplar; buyuk fark genelde
+# bir kolun maskeye girmedigi anlamina gelir.
+SYMMETRY_WARN = 12.0
 PRINT_AREA_MIN, PRINT_AREA_MAX = 3.0, 20.0
 
 
@@ -141,6 +146,22 @@ def main() -> int:
     # ust kenarda 77 piksel temas vardi ve maske sag ustteki danteli
     # giysi sayiyordu. Sessizce gecti, uc tur boyunca yanlis quad
     # uretildi.
+    # Sol-sag simetri. Giysi maskesi bir kolu kacirirsa recolor o
+    # bolgeyi boyamaz ve tisortun bir kolu ESKI RENKTE kalir --
+    # kullanici bunu ancak renkli render aldiktan sonra fark ediyordu.
+    #
+    # Olculdu: saglam maskede fark %0.5, sag kol eksikken %20.9.
+    ys_s, xs_s = np.where(m)
+    if len(xs_s):
+        cx_s = (int(xs_s.min()) + int(xs_s.max())) // 2
+        sol = int(m[:, :cx_s].sum())
+        sag = int(m[:, cx_s:].sum())
+        asim = abs(sol - sag) / max(sol, sag, 1) * 100
+        if asim > SYMMETRY_WARN:
+            r.note("maske sol-sag asimetrik",
+                   f"%{asim:.0f} fark -- bir kol eksik olabilir, "
+                   f"renk degistirmede o bolge eski renkte kalir")
+
     edge_px = int(m[0].sum() + m[-1].sum() + m[:, 0].sum() + m[:, -1].sum())
     edge_limit = int(0.02 * (2 * W + 2 * H))
     if edge_px > edge_limit:

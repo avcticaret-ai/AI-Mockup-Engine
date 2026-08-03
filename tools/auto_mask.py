@@ -365,6 +365,22 @@ def main() -> int:
 
     # Torso kadrajlı bir çekimde tişört karenin kabaca %25-60'ını kaplar.
     # Bu aralığın dışı neredeyse her zaman kötü segmentasyon demek.
+    # Sol-sag simetri: bir kol maskeye girmemisse renk degistirmede
+    # o bolge eski renkte kalir.
+    ys_s, xs_s = np.where(mask > 127)
+    if len(xs_s):
+        cx_s = (int(xs_s.min()) + int(xs_s.max())) // 2
+        sol = int((mask[:, :cx_s] > 127).sum())
+        sag = int((mask[:, cx_s:] > 127).sum())
+        asim = abs(sol - sag) / max(sol, sag, 1) * 100
+        print(f"  sol/sag simetri   : %{asim:.1f} fark")
+        if asim > 12:
+            print()
+            print("  UYARI: maske sol-sag asimetrik. Bir kol eksik olabilir.")
+            print("  Renk degistirmede o bolge ESKI RENKTE kalir.")
+            print("  _debug_mask.png'yi kontrol et; eksikse esikleri gevset")
+            print("  (--s-max yukselt, --v-min dusur) veya GIMP'te rotusla.")
+
     if coverage < 15:
         print("\n  UYARI: maske çok küçük. Eşikler fazla dar olabilir --")
         print("  --s-max 60 --v-min 90 dene, ya da --method cloth.")
